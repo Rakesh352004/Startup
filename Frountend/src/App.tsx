@@ -1,91 +1,66 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
-import Signup from './pages/Signup';
-import DashboardPage from './pages/DashboardPage';
-import ProfilePage from './pages/ProfilePage'; // Make sure this exists
-import IdeaValidation from './pages/IdeaValidation';
-import NotFoundPage from './pages/NotFoundPage';
-import LoadingSpinner from './components/LoadingSpinner';
-import Sidebar from './components/Sidebar'; // Make sure this exists
+// src/App.tsx
+import React from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import LoginPage from "./pages/LoginPage";
+import Signup from "./pages/Signup";
+import HomePage from "./pages/HomePage";
+import ProfilePage from "./pages/ProfilePage";
+import IdeaValidation from "./pages/IdeaValidation";
+import NotFoundPage from "./pages/NotFoundPage";
+import DashboardPage from "./pages/DashboardPage";
+import Sidebar from "./components/Sidebar";
+import ResearchAdvisor from "./pages/ResearchAdvisor";
+import Header from "./components/Header";
+import RoadmapGenerator from "./pages/RoadmapGenerator";
 
-// Protected Route Component
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+function Layout() {
   const location = useLocation();
 
-  if (isLoading) {
-    return <LoadingSpinner fullScreen />;
-  }
+  // Sidebar visibility logic
+  const showSidebar =
+    !["/signin", "/register", "/dashboard"].includes(location.pathname) ||
+    ["/research-papers", "/roadmap"].includes(location.pathname);
 
-  if (!isAuthenticated) {
-    return <Navigate to="/signin" state={{ from: location }} replace />;
-  }
+  // Header visibility logic
+  const showHeader =
+    !["/signin", "/register", "/dashboard"].includes(location.pathname) ||
+    ["/research-papers", "/roadmap"].includes(location.pathname);
 
-  return <>{children}</>;
-}
-
-// Auth Route Component (for already authenticated users)
-function AuthRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
-  const location = useLocation();
-
-  if (isAuthenticated) {
-    return <Navigate to="/dashboard" state={{ from: location }} replace />;
-  }
-
-  return <>{children}</>;
-}
-
-// App Routes
-function AppRoutes() {
   return (
-    <Routes>
-      {/* Public Routes */}
-      <Route path="/" element={<HomePage />} />
-      <Route path="/idea-validation" element={<IdeaValidation />} />
-
-      {/* Auth Routes */}
-      <Route path="/signin" element={
-        <AuthRoute>
-          <LoginPage />
-        </AuthRoute>
-      } />
-      <Route path="/register" element={
-        <AuthRoute>
-          <Signup />
-        </AuthRoute>
-      } />
-
-      {/* Protected Routes */}
-      <Route path="/dashboard" element={
-        <ProtectedRoute>
-          <DashboardPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/profile" element={
-        <ProtectedRoute>
-          <ProfilePage />
-        </ProtectedRoute>
-      } />
-
-      {/* Fallback Routes */}
-      <Route path="/404" element={<NotFoundPage />} />
-      <Route path="*" element={<Navigate to="/404" replace />} />
-    </Routes>
+    <div className="flex flex-col h-screen w-full bg-[#0a032a] text-white">
+      {showHeader && <Header />}
+      <div className="flex flex-1 relative">
+        {showSidebar && <Sidebar />}
+        {/* Content area */}
+        <div className="flex-1 flex flex-col">
+          {/* Scroll only in content area */}
+          <main className="flex-1 overflow-y-auto p-4">
+            <Routes>
+              <Route path="/home" element={<HomePage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/idea-validation" element={<IdeaValidation />} />
+              <Route path="/research-papers" element={<ResearchAdvisor />} />
+              <Route path="/roadmap" element={<RoadmapGenerator />} />
+            </Routes>
+          </main>
+        </div>
+      </div>
+    </div>
   );
 }
 
-// Root App Component
 function App() {
   return (
     <Router>
-      <AuthProvider>
-        <Sidebar />
-        <AppRoutes />
-      </AuthProvider>
+      <Routes>
+        <Route path="/" element={<Navigate to="/signin" replace />} />
+        <Route path="/signin" element={<LoginPage />} />
+        <Route path="/register" element={<Signup />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/*" element={<Layout />} />
+        <Route path="/404" element={<NotFoundPage />} />
+        <Route path="*" element={<Navigate to="/404" replace />} />
+      </Routes>
     </Router>
   );
 }

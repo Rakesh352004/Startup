@@ -1,3 +1,28 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Base styles for dark theme */
+@layer base {
+  :root {
+    --color-primary: 10, 3, 42;    /* #0a032a */
+    --color-secondary: 28, 15, 76; /* #1c0f4c */
+    --color-accent: 109, 40, 217;  /* #6d28d9 */
+  }
+
+  body {
+    background-color: rgb(var(--color-primary));
+    @apply text-white min-h-screen;
+  }
+
+  /* ... rest of your base styles ... */
+}
+
+/* Custom components */
+@layer components {
+  .card {
+    background-color: rgb(var(--color-secondary));
+    @apply p-6 rounded-xl border border-accent;
+  }
+  /* ... rest of your components ... */
+}

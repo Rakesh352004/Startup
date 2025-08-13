@@ -1,111 +1,128 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 
 const Signup: React.FC = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-  });
-
   const navigate = useNavigate();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const togglePassword = (id: string) => {
-    const field = document.getElementById(id) as HTMLInputElement;
-    if (field) {
-      field.type = field.type === 'password' ? 'text' : 'password';
-    }
-  };
+  const passwordsMatch = password === confirmPassword;
+  const passwordOk = password.length >= 6; // adjust minimum length as needed
+  const canSubmit = name.trim() !== "" && email.trim() !== "" && passwordOk && passwordsMatch && !busy;
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match!');
+    setError(null);
+
+    if (!passwordOk) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (!passwordsMatch) {
+      setError("Passwords do not match.");
       return;
     }
 
-    // Replace this with your API call or context logic
-    console.log('Form submitted:', formData);
+    setBusy(true);
+    try {
+      const res = await fetch("http://localhost:8000/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // IMPORTANT: include confirm_password here
+        body: JSON.stringify({ name, email, password, confirm_password: confirmPassword }),
+      });
 
-    // Redirect to login page after signup
-    navigate('/signin');
+      if (res.status === 201 || res.ok) {
+        // registration success — go to signin
+        alert("Registration successful — please login");
+        navigate("/signin", { replace: true });
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.detail || "Registration failed");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Network error — please try again");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <div className="bg-[#0f172a] text-white min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-xl bg-[#1e293b] p-8 rounded-xl shadow-lg">
-        <h2 className="text-3xl font-bold mb-6 text-indigo-400 text-center">Create Your Account</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Full Name</label>
-            <input
-              type="text"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
+    <div className="min-h-screen flex items-center justify-center bg-[#0f172a] text-white px-4">
+      <form onSubmit={handleRegister} className="w-full max-w-md bg-[#1e293b] p-8 rounded-xl">
+        <h2 className="text-2xl font-bold mb-4">Create account</h2>
 
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Email</label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
+        {/* Name */}
+        <label className="text-sm text-gray-400">Name</label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          className="w-full px-3 py-2 rounded mb-3 bg-[#0f172a] border border-gray-700"
+        />
 
-          <div className="relative">
-            <label className="block text-sm text-gray-400 mb-1">Password</label>
-            <input
-              type="password"
-              id="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <span onClick={() => togglePassword('password')} className="absolute right-3 top-9 text-gray-400 cursor-pointer">👁</span>
-          </div>
+        {/* Email */}
+        <label className="text-sm text-gray-400">Email</label>
+        <input
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          type="email"
+          className="w-full px-3 py-2 rounded mb-3 bg-[#0f172a] border border-gray-700"
+        />
 
-          <div className="relative">
-            <label className="block text-sm text-gray-400 mb-1">Confirm Password</label>
-            <input
-              type="password"
-              id="confirm_password"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <span onClick={() => togglePassword('confirm_password')} className="absolute right-3 top-9 text-gray-400 cursor-pointer">👁</span>
-          </div>
+        {/* Password */}
+        <label className="text-sm text-gray-400">Password</label>
+        <input
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          type="password"
+          className="w-full px-3 py-2 rounded mb-3 bg-[#0f172a] border border-gray-700"
+        />
 
-          <button
-            type="submit"
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg transition"
-          >
-          <Link to="/signin" className="text-indigo-400 hover:underline ml-1">Log in</Link>
-          </button>
-        </form>
+        {/* Confirm Password */}
+        <label className="text-sm text-gray-400">Confirm Password</label>
+        <input
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          required
+          type="password"
+          className="w-full px-3 py-2 rounded mb-2 bg-[#0f172a] border border-gray-700"
+        />
+
+        {/* Inline validation messages */}
+        {!passwordOk && (
+          <p className="text-red-400 text-sm mb-2">Password must be at least 6 characters.</p>
+        )}
+        {!passwordsMatch && confirmPassword.length > 0 && (
+          <p className="text-red-400 text-sm mb-2">Passwords do not match.</p>
+        )}
+
+        {/* Server / general error */}
+        {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
+
+        <button
+          disabled={!canSubmit}
+          className={`w-full py-2 rounded ${
+            canSubmit ? "bg-indigo-600 hover:bg-indigo-700" : "bg-gray-600 cursor-not-allowed"
+          }`}
+        >
+          {busy ? "Signing up..." : "Sign up"}
+        </button>
 
         <p className="mt-4 text-gray-400 text-sm text-center">
-          Already have an account?
-          <Link to="/signin" className="text-indigo-400 hover:underline ml-1">Log in</Link>
+          Already have an account?{" "}
+          <Link to="/signin" className="text-indigo-400 hover:underline">
+            Sign in
+          </Link>
         </p>
-      </div>
+      </form>
     </div>
   );
 };
