@@ -1,23 +1,172 @@
-/* Remove all default white backgrounds */
+/* Base Styles */
 body {
-  background-color: #0a032a; /* Your dark purple color */
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   margin: 0;
-  min-height: 100vh;
-  color: white; /* Default text color */
+  padding: 0;
+  color: #333;
+  line-height: 1.6;
 }
 
-/* Optional: Add smooth scrolling */
-html {
-  scroll-behavior: smooth;
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
 }
 
-/* Remove default link styles */
-a {
-  color: inherit;
-  text-decoration: none;
+/* Hero Section */
+.hero {
+  text-align: center;
+  padding: 4rem 0;
 }
 
-/* Remove blue highlight on mobile taps */
-* {
-  -webkit-tap-highlight-color: transparent;
+.hero h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  color: #222;
+}
+
+.subtitle {
+  font-size: 1.2rem;
+  color: #555;
+  max-width: 700px;
+  margin: 0 auto 2rem;
+}
+
+.get-started-btn {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  padding: 0.8rem 2rem;
+  font-size: 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+
+.get-started-btn:hover {
+  background-color: #1d4ed8;
+}
+
+/* Features Section */
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin: 4rem 0;
+}
+
+.feature-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+}
+
+.feature-card h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: #222;
+}
+
+.feature-card p {
+  color: #555;
+  margin-bottom: 1.5rem;
+}
+
+.feature-card ul {
+  list-style: none;
+  padding: 0;
+}
+
+.feature-card li {
+  margin-bottom: 0.5rem;
+  position: relative;
+  padding-left: 1.5rem;
+}
+
+.feature-card li:before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #2563eb;
+}
+
+/* Help Section */
+.help {
+  text-align: center;
+  padding: 4rem 0;
+}
+
+.help h2 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.help-subtitle {
+  max-width: 700px;
+  margin: 0 auto 3rem;
+  color: #555;
+}
+
+.help-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.help-option {
+  background: #fff;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.help-option h3 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.help-option p {
+  color: #555;
+  margin-bottom: 1.5rem;
+}
+
+.help-btn {
+  background-color: #f8fafc;
+  color: #2563eb;
+  border: 1px solid #e2e8f0;
+  padding: 0.6rem 1.5rem;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.help-btn:hover {
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .hero h1 {
+    font-size: 2rem;
+  }
+  
+  .subtitle {
+    font-size: 1rem;
+  }
+  
+  .features, .help-options {
+    grid-template-columns: 1fr;
+  }
 }

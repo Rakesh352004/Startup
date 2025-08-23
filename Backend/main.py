@@ -14,14 +14,20 @@ import httpx
 from dotenv import load_dotenv
 from xml.etree import ElementTree
 import re
-from database import users_collection
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
+from datetime import datetime
+
+from database import users_collection,ideas_collection,profiles_collection,roadmaps_collection,research_collection
 
 # Database imports
 from database import (
     hash_password, verify_password, create_access_token,
     get_user_by_id, get_user_profile, update_user_profile,
     create_roadmap, get_roadmap_by_id, get_user_roadmaps,
-    update_roadmap, delete_roadmap, get_user_by_id
+    update_roadmap, delete_roadmap, get_user_by_id,save_research,get_research_by_id, get_user_research_history
+# Mock imports for external paper fetchers
 )
 
 load_dotenv()
@@ -101,6 +107,10 @@ class ProfileResponse(ProfileBase):
     user_id: str
     updated_at: datetime
 
+class Author(BaseModel):
+    """Pydantic model for an author of a paper."""
+    name: str
+
 class ResearchPaper(BaseModel):
     title: str
     authors: List[str]
@@ -109,7 +119,7 @@ class ResearchPaper(BaseModel):
     source: str
     url: str
     doi: Optional[str] = None
-
+    
 class ResearchRequest(BaseModel):
     idea: str
     max_results: int = 10
@@ -117,6 +127,40 @@ class ResearchRequest(BaseModel):
 class ResearchResponse(BaseModel):
     papers: List[ResearchPaper]
     search_terms: List[str]
+    research_id: str
+    created_at: Any
+
+# ---
+# 3. Real Database & Mock Functions
+# ---
+
+def save_research(user_id: str, research_data: dict) -> str:
+    """Saves a new research document to the MongoDB database."""
+    logging.info(f"Attempting to save research for user {user_id}")
+    try:
+        user_obj_id = ObjectId(user_id)
+        research_doc = {
+            "user_id": user_obj_id,
+            "idea": research_data["idea"],
+            "search_terms": research_data.get("search_terms", []),
+            "papers": research_data.get("papers", []),
+            "created_at": datetime.utcnow()
+        }
+        
+        result = research_collection.insert_one(research_doc)
+        logging.info(f"Successfully saved research with ID: {result.inserted_id}")
+        return str(result.inserted_id)
+    except Exception as e:
+        logging.error(f"Failed to save research to database: {e}")
+        raise HTTPException(status_code=500, detail="Database save failed.")
+
+def generate_search_terms(idea: str) -> List[str]:
+    """A mock function to generate search terms."""
+    return ["machine learning", "agriculture", "precision farming"]
+
+def paper_score(paper: ResearchPaper) -> float:
+    """A mock function to score papers."""
+    return 1.0
 
 # Helper Functions
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -323,87 +367,94 @@ async def fetch_semantic_scholar(search_terms: List[str], max_results: int) -> L
         print(f"❌ Error fetching from Semantic Scholar: {e}")
         return []
 
-async def fetch_arxiv(search_terms: List[str], max_results: int) -> List[ResearchPaper]:
+import logging
+
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+ARXIV_API = "http://export.arxiv.org/api/query"
+
+async def fetch_arxiv(
+    search_terms: List[str],
+    max_results: int = 20,
+    max_abstract_length: int = 500,
+    max_search_terms: int = 3
+) -> List[ResearchPaper]:
+    """
+    Fetches research papers from the arXiv API based on search terms.
+
+    Args:
+        search_terms (List[str]): A list of keywords to search for.
+        max_results (int): The maximum number of papers to return. Defaults to 20.
+        max_abstract_length (int): The maximum length of the abstract to return. 
+                                   Defaults to 500.
+        max_search_terms (int): The maximum number of search terms to use in the 
+                                query. Defaults to 3.
+    
+    Returns:
+        List[ResearchPaper]: A list of ResearchPaper objects.
+    """
     try:
-        # Create better search query for arXiv
+        # Clean and limit search terms for a more focused query
         clean_terms = [term for term in search_terms if len(term) > 2 and not term.startswith("Here")]
-        query_parts = [f'all:"{term}"' for term in clean_terms[:3]]
-        
-        if not query_parts:
-            query = f'all:"artificial intelligence agriculture"'
+        limited_terms = clean_terms[:max_search_terms]
+
+        if not limited_terms:
+            # Use a default query if no valid terms are provided
+            query = 'all:"artificial intelligence agriculture"'
+            logging.info("No valid search terms provided. Using default query.")
         else:
-            query = " AND ".join(query_parts)
-        
+            # Join terms with OR for a broad search
+            query = " OR ".join([f'all:"{term}"' for term in limited_terms])
+            logging.info(f"Querying arXiv with: {query}")
+
         params = {
             "search_query": query,
+            "start": 0,
             "max_results": min(max_results, 20),
             "sortBy": "relevance",
             "sortOrder": "descending"
         }
         
-        print(f"🔍 Querying arXiv with: {query}")
+        headers = {"User-Agent": "MyResearchApp/1.0 (youremail@example.com)"}
         
-        async with httpx.AsyncClient(timeout=45.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=45.0, follow_redirects=True, headers=headers) as client:
             response = await client.get(ARXIV_API, params=params)
-            print(f"📊 arXiv response status: {response.status_code}")
+            logging.info(f"arXiv response status: {response.status_code}")
             
-            if response.status_code != 200:
-                print(f"❌ arXiv error: {response.text[:200]}")
-                return []
-            
-            papers = []
+            # This will raise an exception for 4xx/5xx responses
+            response.raise_for_status() 
             
             try:
+                # Parse the XML response from the API
                 root = ElementTree.fromstring(response.text)
             except ElementTree.ParseError as e:
-                print(f"❌ arXiv XML parse error: {e}")
+                logging.error(f"XML parse error: {e}")
+                logging.debug("Response snippet: %s", response.text[:300])
                 return []
             
-            # Define namespaces
             namespaces = {
                 'atom': 'http://www.w3.org/2005/Atom',
                 'arxiv': 'http://arxiv.org/schemas/atom'
             }
             
             entries = root.findall('atom:entry', namespaces)
-            print(f"📊 arXiv found {len(entries)} entries")
+            logging.info(f"Found {len(entries)} entries")
             
+            papers = []
             for entry in entries:
                 try:
-                    title_elem = entry.find('atom:title', namespaces)
-                    summary_elem = entry.find('atom:summary', namespaces)
-                    published_elem = entry.find('atom:published', namespaces)
-                    id_elem = entry.find('atom:id', namespaces)
+                    # Extract paper details from each entry
+                    title = entry.find('atom:title', namespaces).text.strip()
+                    abstract = entry.find('atom:summary', namespaces).text.strip()
                     
-                    if title_elem is None or summary_elem is None:
-                        continue
-                    
-                    title = title_elem.text.strip() if title_elem.text else ""
-                    abstract = summary_elem.text.strip() if summary_elem.text else ""
-                    
-                    if not title or not abstract:
-                        continue
-                    
-                    # Clean up title and abstract
-                    title = re.sub(r'\s+', ' ', title)
-                    abstract = re.sub(r'\s+', ' ', abstract)
-                    
-                    if len(abstract) > 500:
-                        abstract = abstract[:500] + "..."
-                    
-                    # Extract authors
-                    authors = []
-                    author_elems = entry.findall('atom:author', namespaces)
-                    for author in author_elems:
-                        name_elem = author.find('atom:name', namespaces)
-                        if name_elem is not None and name_elem.text:
-                            authors.append(name_elem.text.strip())
-                    
-                    # Get publication date
-                    pub_date = published_elem.text if published_elem is not None else ""
-                    
-                    # Get URL
-                    url = id_elem.text if id_elem is not None else ""
+                    if len(abstract) > max_abstract_length:
+                        abstract = abstract[:max_abstract_length] + "..."
+
+                    authors = [a.find('atom:name', namespaces).text.strip()
+                               for a in entry.findall('atom:author', namespaces)]
+                    pub_date = entry.find('atom:published', namespaces).text
+                    url = entry.find('atom:id', namespaces).text
                     
                     papers.append(ResearchPaper(
                         title=title,
@@ -413,16 +464,24 @@ async def fetch_arxiv(search_terms: List[str], max_results: int) -> List[Researc
                         source="arXiv",
                         url=url
                     ))
-                    
                 except Exception as e:
-                    print(f"⚠️ Error processing arXiv paper: {e}")
+                    logging.warning(f"Error processing paper entry: {e}")
                     continue
             
-            print(f"✅ arXiv returned {len(papers)} papers")
+            logging.info(f"Returning {len(papers)} papers")
             return papers[:max_results]
             
+    except httpx.HTTPStatusError as e:
+        # Handle specific HTTP errors (e.g., 404, 500)
+        logging.error(f"HTTP error fetching from arXiv: {e}")
+        return []
+    except httpx.RequestError as e:
+        # Handle network-related errors (e.g., DNS failure, connection timeout)
+        logging.error(f"Network error fetching from arXiv: {e}")
+        return []
     except Exception as e:
-        print(f"❌ Error fetching from arXiv: {e}")
+        # Catch any other unexpected errors
+        logging.error(f"An unexpected error occurred: {e}")
         return []
 
 async def fetch_crossref(search_terms: List[str], max_results: int) -> List[ResearchPaper]:
@@ -686,6 +745,7 @@ def validate_idea(idea: IdeaInput, current_user=Depends(get_current_user)):
         suggestions=ai_result["suggestions"],
         created_at=idea_doc["created_at"],
     )
+
 
 
 @app.post("/profile", response_model=ProfileResponse)
@@ -983,42 +1043,31 @@ def call_groq_roadmap(prompt: str, timeframe: str) -> str:
         "Content-Type": "application/json"
     }
     
-    system_prompt = """You are a startup roadmap specialist. Generate a detailed, actionable roadmap based on the provided idea and timeframe. Structure your response EXACTLY as follows:
+    system_prompt = f"""You are a startup roadmap specialist. Generate a detailed, actionable roadmap based on the provided idea and timeframe. 
+    
+    IMPORTANT: The timeframe is {timeframe}. Adjust the number of phases, their duration, and scope accordingly:
+    - 3 months: 3 phases (1 month each)
+    - 6 months: 4-5 phases (1-1.5 months each)
+    - 9 months: 5-6 phases (1.5-2 months each)
+    - 12 months: 6-7 phases (1.5-2 months each)
+    - 18 months: 8-9 phases (2 months each)
+    
+    Structure your response EXACTLY as follows:
 
-Overview:
-[Provide a 3-4 sentence high-level summary of the entire roadmap]
+    Overview:
+    [3-4 sentence summary]
 
-Phase 1: [Phase Name] - [Brief one-line description]
-Tasks:
-- Task 1 (specific action item)
-- Task 2
-- Task 3
-- Task 4
-Implementation:
-- How to accomplish this phase (3-4 specific steps)
-- Resources needed
-- Team members involved
-- Potential challenges
+    Phase 1: [Name] - [1-line description]
+    Tasks:
+    - Task 1
+    - Task 2
+    - Task 3
+    Implementation:
+    - Step 1
+    - Step 2
+    - Step 3
 
-Phase 2: [Phase Name] - [Brief one-line description]
-Tasks:
-- Task 1
-- Task 2
-- Task 3
-- Task 4
-Implementation:
-- How to accomplish this phase (3-4 specific steps)
-- Resources needed
-- Team members involved
-- Potential challenges
-
-[Continue with Phase 3, 4, etc. as needed based on timeframe]
-
-Each phase should have:
-1. A clear name and one-line description
-2. 4-5 specific tasks (bullet points under "Tasks")
-3. 3-4 implementation details (bullet points under "Implementation")
-4. Adjust the number of phases according to the specified timeframe (3 months = 3 phases, 6 months = 5 phases, etc.)"""
+    [Continue with subsequent phases]"""
 
     payload = {
         "model": "llama3-8b-8192",
@@ -1026,7 +1075,7 @@ Each phase should have:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Create a roadmap for: {prompt}\nTimeframe: {timeframe}"}
         ],
-        "temperature": 0.6
+        "temperature": 0.7
     }
 
     try:
@@ -1036,66 +1085,66 @@ Each phase should have:
         return data["choices"][0]["message"]["content"]
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Groq API request failed: {str(e)}")
+
 @app.post("/research-papers", response_model=ResearchResponse)
-async def get_research_papers(request: ResearchRequest, current_user=Depends(get_current_user)):
-    print(f"🔍 Research request received: {request.idea[:50]}...")
-    print(f"👤 User: {current_user.get('email', 'Unknown')}")
+async def get_research_papers(request: ResearchRequest, current_user: Dict[str, Any] = Depends(get_current_user)) -> ResearchResponse:
+    """
+    Fetches, deduplicates, and returns a curated list of research papers
+    based on a startup idea, storing the results in the database.
+    """
+    logging.info(f"🔍 Research request received: {request.idea[:50]}...")
+    user_id = str(current_user.get("_id"))
     
+    # 1. Input validation
     if not request.idea or not request.idea.strip():
         raise HTTPException(status_code=400, detail="Idea cannot be empty")
     
     try:
+        # 2. Generate search terms
         search_terms = generate_search_terms(request.idea)
         if not search_terms:
+            logging.warning("No search terms generated. Using original idea as a fallback.")
             search_terms = [request.idea]
         
-        print(f"🔍 Generated search terms: {search_terms}")
+        logging.info(f"🔍 Generated search terms: {search_terms}")
         
-        # Initialize results
-        semantic_papers = []
-        arxiv_papers = []
-        crossref_papers = []
+        # 3. Concurrently fetch papers from all sources
+        tasks = [
+            fetch_semantic_scholar(search_terms, request.max_results),
+            fetch_arxiv(search_terms, request.max_results),
+            fetch_crossref(search_terms, request.max_results)
+        ]
         
-        # Fetch from all sources with proper error handling and rate limiting
-        print("🌐 Fetching from Semantic Scholar...")
-        try:
-            # Start with a longer delay for Semantic Scholar
-            await asyncio.sleep(5)
-            semantic_papers = await fetch_semantic_scholar(search_terms, request.max_results)
-            await asyncio.sleep(3)  # Rate limiting between calls
-        except Exception as e:
-            print(f"⚠️ Semantic Scholar failed: {e}")
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        print("🌐 Fetching from arXiv...")
-        try:
-            arxiv_papers = await fetch_arxiv(search_terms, request.max_results)
-            await asyncio.sleep(3)  # Rate limiting between calls
-        except Exception as e:
-            print(f"⚠️ arXiv failed: {e}")
+        all_papers: List[ResearchPaper] = []
+        source_names = ["Semantic Scholar", "arXiv", "CrossRef"]
         
-        print("🌐 Fetching from CrossRef...")
-        try:
-            crossref_papers = await fetch_crossref(search_terms, request.max_results)
-        except Exception as e:
-            print(f"⚠️ CrossRef failed: {e}")
+        for i, result in enumerate(results):
+            source_name = source_names[i]
+            if isinstance(result, Exception):
+                logging.error(f"⚠️ {source_name} failed with an error: {result}")
+            elif isinstance(result, list):
+                # Ensure each item in the list is the expected type
+                for paper in result:
+                    if isinstance(paper, ResearchPaper):
+                        all_papers.append(paper)
+                    else:
+                        logging.warning(f"⚠️ Unexpected paper type from {source_name}: {type(paper)}")
+            else:
+                logging.warning(f"⚠️ Unexpected response from {source_name}: {type(result)}")
         
-        print(f"📊 Paper counts - Semantic Scholar: {len(semantic_papers)}, arXiv: {len(arxiv_papers)}, CrossRef: {len(crossref_papers)}")
+        logging.info(f"📊 Total papers fetched: {len(all_papers)}")
         
-        # Combine and deduplicate papers
-        all_papers = []
-        all_papers.extend(semantic_papers)
-        all_papers.extend(arxiv_papers)
-        all_papers.extend(crossref_papers)
-        
-        # Deduplicate by normalized title
-        unique_papers = []
-        seen_titles = set()
+        # 4. Deduplicate and normalize papers
+        unique_papers: List[ResearchPaper] = []
+        seen_titles: Set[str] = set()
         
         for paper in all_papers:
             if not paper.title or not paper.title.strip():
                 continue
-                
-            # Normalize title for comparison
+            
+            # Normalize title for case-insensitive comparison
             normalized_title = re.sub(r'[^\w\s]', '', paper.title.lower())
             normalized_title = re.sub(r'\s+', ' ', normalized_title).strip()
             
@@ -1103,33 +1152,15 @@ async def get_research_papers(request: ResearchRequest, current_user=Depends(get
                 seen_titles.add(normalized_title)
                 unique_papers.append(paper)
         
-        # Score and sort papers
-        def paper_score(paper):
-            score = 0
-            if paper.abstract and len(paper.abstract) > 100:
-                score += 5
-            if paper.authors and len(paper.authors) > 0:
-                score += 3
-            if paper.doi:
-                score += 2
-            if paper.published_date:
-                score += 1
-            if paper.url:
-                score += 1
-            if paper.source == "Semantic Scholar":
-                score += 2
-            elif paper.source == "arXiv":
-                score += 1
-            return score
-        
+        # 5. Score and sort unique papers
         unique_papers.sort(key=paper_score, reverse=True)
         
-        # Balance sources in final result
-        final_papers = []
-        source_counts = {"Semantic Scholar": 0, "arXiv": 0, "CrossRef": 0}
-        max_per_source = max(3, request.max_results // 3)
+        # 6. Balance sources and limit final results
+        final_papers: List[ResearchPaper] = []
+        source_counts: Dict[str, int] = {source: 0 for source in source_names}
+        max_per_source = max(2, request.max_results // 3)
         
-        # First pass: add papers up to max per source
+        # Distribute papers, ensuring a balance of sources
         for paper in unique_papers:
             if len(final_papers) >= request.max_results:
                 break
@@ -1137,34 +1168,41 @@ async def get_research_papers(request: ResearchRequest, current_user=Depends(get
                 final_papers.append(paper)
                 source_counts[paper.source] += 1
         
-        # Second pass: fill remaining slots with any remaining papers
+        # Fill any remaining slots with the highest-ranked papers regardless of source
         if len(final_papers) < request.max_results:
-            remaining = request.max_results - len(final_papers)
-            for paper in unique_papers:
-                if paper not in final_papers and remaining > 0:
-                    final_papers.append(paper)
-                    remaining -= 1
-        
-        print(f"✅ Final result: {len(final_papers)} papers")
-        print(f"📊 Source distribution: {dict(source_counts)}")
+            remaining_papers = [p for p in unique_papers if p not in final_papers]
+            final_papers.extend(remaining_papers[:request.max_results - len(final_papers)])
+
+        logging.info(f"✅ Final result: {len(final_papers)} curated papers")
         
         if not final_papers:
-            print("⚠️ No papers found from any source")
-            return ResearchResponse(
-                papers=[],
-                search_terms=search_terms
-            )
+            logging.warning("⚠️ No papers found from any source.")
+            return ResearchResponse(papers=[], search_terms=search_terms, research_id="none", created_at=None)
+
+        # 7. Prepare and save data to the database
+        paper_data_list = [p.dict() for p in final_papers]
+        research_doc = {
+            "idea": request.idea,
+            "search_terms": search_terms,
+            "papers": paper_data_list,
+        }
+        
+        research_id = save_research(user_id, research_doc)
         
         return ResearchResponse(
             papers=final_papers,
-            search_terms=search_terms
+            search_terms=search_terms,
+            research_id=research_id,
+            created_at=datetime.utcnow()
         )
         
+    except HTTPException:
+        # Re-raise explicit HTTPException
+        raise
     except Exception as e:
-        print(f"❌ Error in research papers endpoint: {e}")
-        import traceback
-        traceback.print_exc()
+        logging.exception("❌ An unhandled error occurred in the research papers endpoint")
         raise HTTPException(status_code=500, detail=f"Failed to fetch research papers: {str(e)}")
+
 
 @app.get("/")
 def root():

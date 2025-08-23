@@ -82,7 +82,7 @@ export default function Header() {
               onClick={() => navigate("/profile")}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg mb-2 transition-colors"
             >
-              Update Profile
+              Edit Profile
             </button>
             <button
               onClick={() => {

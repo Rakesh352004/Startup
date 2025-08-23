@@ -12,6 +12,8 @@ import Sidebar from "./components/Sidebar";
 import ResearchAdvisor from "./pages/ResearchAdvisor";
 import Header from "./components/Header";
 import RoadmapGenerator from "./pages/RoadmapGenerator";
+import Contact from "./pages/contact";
+
 
 function Layout() {
   const location = useLocation();
@@ -19,12 +21,12 @@ function Layout() {
   // Sidebar visibility logic
   const showSidebar =
     !["/signin", "/register", "/dashboard"].includes(location.pathname) ||
-    ["/research-papers", "/roadmap"].includes(location.pathname);
+    ["/research-papers", "/roadmap","/contact"].includes(location.pathname);
 
   // Header visibility logic
   const showHeader =
     !["/signin", "/register", "/dashboard"].includes(location.pathname) ||
-    ["/research-papers", "/roadmap"].includes(location.pathname);
+    ["/research-papers", "/roadmap","/contact"].includes(location.pathname);
 
   return (
     <div className="flex flex-col h-screen w-full bg-[#0a032a] text-white">
@@ -41,6 +43,8 @@ function Layout() {
               <Route path="/idea-validation" element={<IdeaValidation />} />
               <Route path="/research-papers" element={<ResearchAdvisor />} />
               <Route path="/roadmap" element={<RoadmapGenerator />} />
+              <Route path="/contact" element={<Contact />} />
+                            
             </Routes>
           </main>
         </div>

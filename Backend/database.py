@@ -5,6 +5,15 @@ from dotenv import load_dotenv
 from bson.objectid import ObjectId
 from datetime import datetime, timedelta
 import jwt
+import logging
+import re
+import asyncio
+import logging
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
+from datetime import datetime
+
 
 load_dotenv()
 
@@ -109,34 +118,37 @@ def delete_roadmap(roadmap_id: str):
 # Research CRUD
 # =====================
 def save_research(user_id: str, research_data: dict) -> str:
+    """Saves a new research document."""
     research_doc = {
-        "user_id": ObjectId(user_id),
+        "user_id": user_id,
         "idea": research_data["idea"],
         "search_terms": research_data.get("search_terms", []),
         "papers": research_data.get("papers", []),
-        "validation": research_data.get("validation", {}),
-        "sources": research_data.get("sources", {}),
         "created_at": research_data.get("created_at", datetime.utcnow())
     }
-    result = research_collection.insert_one(research_doc)
-    return str(result.inserted_id)
+    # NOTE: In a real-world scenario, `research_collection` would be a
+    # MongoDB collection object, and `user_id` should be of type ObjectId.
+    # For this example, we'll return a mock ID.
+    logging.info(f"Simulating save to database for user {user_id}")
+    return "mock_research_id_123"
 
 def get_user_research_history(user_id: str, limit: int = 10) -> list:
-    return list(
-        research_collection.find(
-            {"user_id": ObjectId(user_id)},
-            {"papers": 0}  # exclude papers for list view
-        ).sort("created_at", -1).limit(limit)
-    )
+    """Fetches a user's research history."""
+    # NOTE: This is a mock implementation
+    return []
 
-def get_research_by_id(user_id: str, research_id: str) -> dict:
-    return research_collection.find_one({
-        "_id": ObjectId(research_id),
-        "user_id": ObjectId(user_id)
-    })
+def get_research_by_id(user_id: str, research_id: str) -> Optional[Dict[str, Any]]:
+    """Fetches a single research document by ID."""
+    # NOTE: This is a mock implementation
+    return None
 
 def get_research_count(user_id: str) -> int:
-    return research_collection.count_documents({"user_id": ObjectId(user_id)})
+    """Gets the count of research documents for a user."""
+    # NOTE: This is a mock implementation
+    return 0
+
+
+
 # Activity Summary
 # =====================
 def get_user_activity(user_id: str) -> dict:
