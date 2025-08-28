@@ -10,7 +10,7 @@ interface ProfileData {
   interests: string[];
   preferred_role: string;
   experience: string;
-  availability: number;
+  availability: string; // Changed from number to string
   location: string;
 }
 
@@ -24,7 +24,7 @@ const Profile = () => {
     interests: [],
     preferred_role: '',
     experience: '',
-    availability: 0,
+    availability: '',
     location: ''
   });
 
@@ -53,7 +53,7 @@ const Profile = () => {
             interests: response.data.interests || [],
             preferred_role: response.data.preferred_role || '',
             experience: response.data.experience || '',
-            availability: response.data.availability || 0,
+            availability: response.data.availability || '',
             location: response.data.location || ''
           });
         }
@@ -72,14 +72,12 @@ const Profile = () => {
     if (name === 'skills' || name === 'interests') {
       const arrayValue = value.split(',').map(item => item.trim());
       setFormData(prev => ({ ...prev, [name]: arrayValue }));
-    } else if (name === 'availability') {
-      setFormData(prev => ({ ...prev, [name]: Number(value) }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
 
-  // Handles saving the profile (replaces handleSubmit)
+  // Handles saving the profile
   const handleSave = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -109,8 +107,6 @@ const Profile = () => {
       <div className="bg-[#1e293b] w-full max-w-4xl p-8 rounded-xl shadow-lg mt-10 mb-10">
         <h2 className="text-3xl font-bold mb-6 text-indigo-400 text-center">👤 Complete Your Profile</h2>
 
-
-
         <form
           onSubmit={(e) => { e.preventDefault(); handleSave(); }}
           className="space-y-5"
@@ -124,7 +120,8 @@ const Profile = () => {
               value={formData.name}
               onChange={handleChange}
               required 
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500"
+              disabled={!isEditing}
+              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
             />
           </div>
 
@@ -137,7 +134,8 @@ const Profile = () => {
               value={formData.email}
               onChange={handleChange}
               required 
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500"
+              disabled={!isEditing}
+              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
             />
           </div>
 
@@ -150,7 +148,8 @@ const Profile = () => {
               value={formData.role}
               onChange={handleChange}
               placeholder="e.g. Final year student, Software Engineer" 
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500"
+              disabled={!isEditing}
+              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
             />
           </div>
 
@@ -163,7 +162,8 @@ const Profile = () => {
               value={formData.skills.join(', ')}
               onChange={handleChange}
               placeholder="e.g. Python, UI/UX, Marketing, Finance" 
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500"
+              disabled={!isEditing}
+              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
             />
             <p className="text-xs text-gray-400 mt-1">Use comma-separated values</p>
           </div>
@@ -177,28 +177,24 @@ const Profile = () => {
               value={formData.interests.join(', ')}
               onChange={handleChange}
               placeholder="e.g. EdTech, HealthTech, AI, SaaS" 
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500"
+              disabled={!isEditing}
+              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
             />
             <p className="text-xs text-gray-400 mt-1">Use comma-separated values</p>
           </div>
 
-          {/* Preferred Role in Startup */}
+          {/* Preferred Role in Startup - Changed to text input */}
           <div>
             <label className="block text-sm text-gray-300 mb-1">Preferred Role in Startup</label>
-            <select 
+            <input 
+              type="text" 
               name="preferred_role" 
               value={formData.preferred_role}
               onChange={handleChange}
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">Select</option>
-              <option>Developer</option>
-              <option>Product Manager</option>
-              <option>UI/UX Designer</option>
-              <option>Marketing</option>
-              <option>Sales</option>
-              <option>Finance</option>
-            </select>
+              placeholder="e.g. Developer, Product Manager, etc." 
+              disabled={!isEditing}
+              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
+            />
           </div>
 
           {/* Experience Level */}
@@ -208,7 +204,8 @@ const Profile = () => {
               name="experience" 
               value={formData.experience}
               onChange={handleChange}
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500"
+              disabled={!isEditing}
+              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
             >
               <option value="">Select</option>
               <option>Junior</option>
@@ -217,17 +214,20 @@ const Profile = () => {
             </select>
           </div>
 
-          {/* Availability */}
+          {/* Availability - Changed to dropdown with Part Time/Full Time */}
           <div>
-            <label className="block text-sm text-gray-300 mb-1">Availability (hours/week)</label>
-            <input 
-              type="number" 
+            <label className="block text-sm text-gray-300 mb-1">Availability</label>
+            <select 
               name="availability" 
               value={formData.availability}
               onChange={handleChange}
-              placeholder="e.g. 10, 20, 40" 
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500"
-            />
+              disabled={!isEditing}
+              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
+            >
+              <option value="">Select</option>
+              <option>Part Time</option>
+              <option>Full Time</option>
+            </select>
           </div>
 
           {/* Location / Timezone */}
@@ -239,26 +239,39 @@ const Profile = () => {
               value={formData.location}
               onChange={handleChange}
               placeholder="e.g. Bangalore, IST / UTC+5:30" 
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500"
+              disabled={!isEditing}
+              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
             />
           </div>
 
-          {/* Edit and Save Buttons */}
+          {/* Buttons */}
           <div className="flex justify-center gap-4 mt-8">
-            <button
-              type="button"
-              onClick={() => setIsEditing(!isEditing)}
-              className="bg-blue-600 px-6 py-3 rounded-lg hover:bg-blue-700 transition"
-            >
-              {isEditing ? 'Cancel' : 'Edit Profile'}
-            </button>
-            
-            <button 
-              type="submit" 
-              className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition"
-            >
-              Save Profile
-            </button>
+            {!isEditing ? (
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="bg-blue-600 px-6 py-3 rounded-lg hover:bg-blue-700 transition"
+              >
+                Edit Profile
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  className="bg-gray-600 px-6 py-3 rounded-lg hover:bg-gray-700 transition"
+                >
+                  Cancel
+                </button>
+                
+                <button 
+                  type="submit" 
+                  className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition"
+                >
+                  Save Profile
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>

@@ -12,39 +12,45 @@ import Sidebar from "./components/Sidebar";
 import ResearchAdvisor from "./pages/ResearchAdvisor";
 import Header from "./components/Header";
 import RoadmapGenerator from "./pages/RoadmapGenerator";
-import Contact from "./pages/contact";
-
+import Contact from "./pages/Help";
 
 function Layout() {
   const location = useLocation();
-
+  
   // Sidebar visibility logic
   const showSidebar =
     !["/signin", "/register", "/dashboard"].includes(location.pathname) ||
-    ["/research-papers", "/roadmap","/contact"].includes(location.pathname);
-
+    ["/research-papers", "/roadmap", "/contact"].includes(location.pathname);
+  
   // Header visibility logic
   const showHeader =
     !["/signin", "/register", "/dashboard"].includes(location.pathname) ||
-    ["/research-papers", "/roadmap","/contact"].includes(location.pathname);
-
+    ["/research-papers", "/roadmap", "/contact"].includes(location.pathname);
+  
   return (
-    <div className="flex flex-col h-screen w-full bg-[#0a032a] text-white">
-      {showHeader && <Header />}
-      <div className="flex flex-1 relative">
+    <div className="h-screen w-full bg-[#0a032a] text-white">
+      {/* Fixed Header at the top spanning full width - covers sidebar */}
+      {showHeader && (
+        <div className="fixed top-0 left-0 right-0 z-50">
+          <Header />
+        </div>
+      )}
+      
+      {/* Content area without top padding - sidebar starts from top */}
+      <div className="flex h-full">
+        {/* Sidebar on the left - starts from top, gets covered by header */}
         {showSidebar && <Sidebar />}
-        {/* Content area */}
+        
+        {/* Main content on the right */}
         <div className="flex-1 flex flex-col">
-          {/* Scroll only in content area */}
-          <main className="flex-1 overflow-y-auto p-4">
+          <main className="flex-1 overflow-y-auto p-4 pt-20">
             <Routes>
               <Route path="/home" element={<HomePage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/idea-validation" element={<IdeaValidation />} />
               <Route path="/research-papers" element={<ResearchAdvisor />} />
               <Route path="/roadmap" element={<RoadmapGenerator />} />
-              <Route path="/contact" element={<Contact />} />
-                            
+              <Route path="/help" element={<Contact />} />
             </Routes>
           </main>
         </div>
