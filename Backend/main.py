@@ -203,7 +203,7 @@ def call_groq_validation(prompt: str) -> str:
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "llama3-8b-8192",
+        "model": "llama-3.1-8b-instant",  # ✅ UPDATED MODEL
         "messages": [
             {"role": "system", "content": "You are a startup idea validation assistant."},
             {"role": "user", "content": prompt}
@@ -258,7 +258,7 @@ def generate_search_terms(idea: str) -> List[str]:
     """
     
     payload = {
-        "model": "llama3-8b-8192",
+        "model": "llama-3.1-8b-instant",  # ✅ UPDATED MODEL
         "messages": [
             {
                 "role": "system", 
@@ -289,6 +289,12 @@ def generate_search_terms(idea: str) -> List[str]:
                 return clean_terms[:5]
     except Exception as e:
         print(f"Error generating search terms with Groq: {e}")
+    
+    # Fallback if API fails
+    words = re.findall(r'\b\w{3,}\b', idea.lower())
+    stop_words = {'the', 'and', 'for', 'with', 'that', 'this', 'your', 'have', 'from'}
+    filtered_words = [word for word in words if word not in stop_words]
+    return filtered_words[:5] if filtered_words else ["startup", "technology", "innovation"]
     
     # Fallback to the enhanced method
     return generate_search_terms.fallback(idea)
@@ -736,9 +742,24 @@ from pydantic import BaseModel, Field
 # ----------------------------------------------
 
 
-# Environment variable for GROQ API (you'll need to set this)
 import os
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")  # Make sure to set this in your environment
+import json
+import re
+import requests
+from datetime import datetime
+from typing import List
+from fastapi import HTTPException
+from pydantic import BaseModel, Field
+
+# Environment variable with fallback check
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+# Print API key status for debugging (remove in production)
+if GROQ_API_KEY:
+    print(f"✅ GROQ API Key loaded: {GROQ_API_KEY[:10]}...{GROQ_API_KEY[-4:]}")
+else:
+    print("❌ GROQ_API_KEY not found in environment variables")
+    print("Available environment variables:", [k for k in os.environ.keys() if 'GROQ' in k.upper()])
 
 # Pydantic models
 class IdeaInput(BaseModel):
@@ -775,10 +796,20 @@ class ValidationResponse(BaseModel):
 
 def call_groq_validation(prompt: str) -> dict:
     """
-    Enhanced validation function using the comprehensive AI prompt system
+    Enhanced validation function with comprehensive error handling
     """
     if not GROQ_API_KEY:
-        raise HTTPException(status_code=500, detail="GROQ_API_KEY not set in environment")
+        # More specific error message
+        raise HTTPException(
+            status_code=500, 
+            detail="GROQ_API_KEY environment variable is not set. Please configure your API key."
+        )
+
+    if not GROQ_API_KEY.startswith('gsk_'):
+        raise HTTPException(
+            status_code=500,
+            detail="Invalid GROQ API key format. Key should start with 'gsk_'"
+        )
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
@@ -852,22 +883,56 @@ Provide ONLY the JSON response with no additional text."""
     user_prompt = f"Please validate this startup idea comprehensively: {prompt}"
 
     payload = {
-        "model": "llama3-70b-8192",  # Using more powerful model for better analysis
+        "model": "llama-3.3-70b-versatile",  # ✅ UPDATED to current available model
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
-        "temperature": 0.3,  # Lower temperature for more consistent analysis
+        "temperature": 0.3,
         "max_tokens": 4000
     }
 
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail="Failed to get response from Groq API")
+        print(f"🔄 Sending request to GROQ API...")
+        response = requests.post(url, headers=headers, json=payload, timeout=60)  # Increased timeout
+        
+        # Enhanced error handling
+        if response.status_code == 401:
+            print("❌ Authentication failed - Invalid API key")
+            raise HTTPException(
+                status_code=401, 
+                detail="Authentication failed. Please check your GROQ API key is valid and active."
+            )
+        elif response.status_code == 429:
+            print("⚠️ Rate limit exceeded")
+            raise HTTPException(
+                status_code=429, 
+                detail="Rate limit exceeded. Please wait before making another request."
+            )
+        elif response.status_code == 400:
+            print(f"❌ Bad request: {response.text}")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Bad request to GROQ API: {response.text}"
+            )
+        elif response.status_code != 200:
+            print(f"❌ API Error {response.status_code}: {response.text}")
+            raise HTTPException(
+                status_code=response.status_code, 
+                detail=f"GROQ API error {response.status_code}: {response.text}"
+            )
 
         data = response.json()
+        
+        # Check if response has expected structure
+        if "choices" not in data or not data["choices"]:
+            raise HTTPException(
+                status_code=500,
+                detail="Invalid response structure from GROQ API"
+            )
+        
         ai_text = data["choices"][0]["message"]["content"]
+        print(f"✅ Received response from GROQ API ({len(ai_text)} characters)")
         
         # Clean up the response to ensure it's valid JSON
         ai_text = ai_text.strip()
@@ -880,21 +945,134 @@ Provide ONLY the JSON response with no additional text."""
         # Parse JSON response
         try:
             result = json.loads(ai_text)
-        except json.JSONDecodeError:
+            print("✅ Successfully parsed JSON response")
+        except json.JSONDecodeError as e:
+            print(f"⚠️ JSON parsing failed: {e}")
+            print(f"Raw response: {ai_text[:500]}...")
             # Fallback: try to extract data using regex patterns
             result = parse_fallback_response(ai_text)
+            print("✅ Used fallback parsing")
+        
+        # Validate result structure
+        if not validate_response_structure(result):
+            print("⚠️ Response structure invalid, applying fixes")
+            result = fix_response_structure(result)
         
         return result
         
+    except requests.exceptions.Timeout:
+        print("⏰ Request timeout")
+        raise HTTPException(
+            status_code=504, 
+            detail="Request timeout. GROQ API took too long to respond."
+        )
+    except requests.exceptions.ConnectionError:
+        print("🌐 Connection error")
+        raise HTTPException(
+            status_code=503, 
+            detail="Connection error. Unable to reach GROQ API."
+        )
     except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"API request failed: {str(e)}")
+        print(f"🔗 Request exception: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"API request failed: {str(e)}"
+        )
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Validation processing failed: {str(e)}")
+        print(f"❌ Unexpected error: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Validation processing failed: {str(e)}"
+        )
+
+def validate_response_structure(result: dict) -> bool:
+    """Validate that the response has the expected structure"""
+    required_keys = ["overall_score", "scores", "analysis", "suggestions"]
+    if not all(key in result for key in required_keys):
+        return False
+    
+    required_scores = ["feasibility", "market_demand", "uniqueness", "strength", "risk_factors"]
+    if not all(key in result.get("scores", {}) for key in required_scores):
+        return False
+    
+    required_analysis = ["verdict", "feasibility", "market_demand", "uniqueness", 
+                        "strength", "risk_factors", "existing_competitors"]
+    if not all(key in result.get("analysis", {}) for key in required_analysis):
+        return False
+    
+    required_suggestions = ["critical", "recommended", "optional"]
+    if not all(key in result.get("suggestions", {}) for key in required_suggestions):
+        return False
+    
+    return True
+
+def fix_response_structure(result: dict) -> dict:
+    """Fix missing or invalid structure in response"""
+    # Ensure overall_score exists
+    if "overall_score" not in result:
+        result["overall_score"] = 70
+    
+    # Ensure scores section
+    if "scores" not in result:
+        result["scores"] = {}
+    
+    default_scores = {
+        "feasibility": 70,
+        "market_demand": 70,
+        "uniqueness": 70,
+        "strength": 70,
+        "risk_factors": 70
+    }
+    
+    for key, default in default_scores.items():
+        if key not in result["scores"]:
+            result["scores"][key] = default
+    
+    # Ensure analysis section
+    if "analysis" not in result:
+        result["analysis"] = {}
+    
+    default_analysis = {
+        "verdict": "Comprehensive analysis completed with key insights identified.",
+        "feasibility": "Technical and operational feasibility assessed.",
+        "market_demand": "Market demand indicators evaluated.",
+        "uniqueness": "Differentiation opportunities analyzed.",
+        "strength": "Core strengths and value proposition reviewed.",
+        "risk_factors": "Key risks and mitigation strategies identified.",
+        "existing_competitors": "Competitive landscape assessment completed."
+    }
+    
+    for key, default in default_analysis.items():
+        if key not in result["analysis"]:
+            result["analysis"][key] = default
+    
+    # Ensure suggestions section
+    if "suggestions" not in result:
+        result["suggestions"] = {}
+    
+    default_suggestions = {
+        "critical": ["Validate market demand through customer interviews", 
+                    "Develop minimum viable product", "Secure initial funding"],
+        "recommended": ["Build strategic partnerships", "Focus on user experience", 
+                       "Implement analytics tracking"],
+        "optional": ["Explore additional market segments", "Consider international expansion"]
+    }
+    
+    for key, default in default_suggestions.items():
+        if key not in result["suggestions"]:
+            result["suggestions"][key] = default
+    
+    return result
 
 def parse_fallback_response(text: str) -> dict:
     """
     Fallback parser in case JSON parsing fails
     """
+    print("🔧 Using fallback response parser")
+    
     # Extract scores using regex patterns
     overall_score = extract_score(text, r"overall[_\s]*score[\"']?\s*:\s*(\d+)")
     feasibility_score = extract_score(text, r"feasibility[\"']?\s*:\s*(\d+)")
@@ -904,13 +1082,20 @@ def parse_fallback_response(text: str) -> dict:
     risk_score = extract_score(text, r"risk[_\s]*factors[\"']?\s*:\s*(\d+)")
     
     # Extract analysis sections
-    verdict = extract_section(text, r"verdict[\"']?\s*:\s*[\"'](.*?)[\"']", "Strong potential identified with key areas for development.")
-    feasibility = extract_section(text, r"feasibility[\"']?\s*:\s*[\"'](.*?)[\"']", "Technical implementation appears feasible with proper planning.")
-    market_demand = extract_section(text, r"market[_\s]*demand[\"']?\s*:\s*[\"'](.*?)[\"']", "Market shows promising demand indicators.")
-    uniqueness = extract_section(text, r"uniqueness[\"']?\s*:\s*[\"'](.*?)[\"']", "Concept demonstrates notable differentiation opportunities.")
-    strength = extract_section(text, r"strength[\"']?\s*:\s*[\"'](.*?)[\"']", "Core strengths provide solid foundation for growth.")
-    risk_factors = extract_section(text, r"risk[_\s]*factors[\"']?\s*:\s*[\"'](.*?)[\"']", "Manageable risks identified with mitigation strategies available.")
-    competitors = extract_section(text, r"competitors[\"']?\s*:\s*[\"'](.*?)[\"']", "Competitive landscape analysis reveals positioning opportunities.")
+    verdict = extract_section(text, r"verdict[\"']?\s*:\s*[\"'](.*?)[\"']", 
+                             "Strong potential identified with key areas for development.")
+    feasibility = extract_section(text, r"feasibility[\"']?\s*:\s*[\"'](.*?)[\"']", 
+                                 "Technical implementation appears feasible with proper planning.")
+    market_demand = extract_section(text, r"market[_\s]*demand[\"']?\s*:\s*[\"'](.*?)[\"']", 
+                                   "Market shows promising demand indicators.")
+    uniqueness = extract_section(text, r"uniqueness[\"']?\s*:\s*[\"'](.*?)[\"']", 
+                                "Concept demonstrates notable differentiation opportunities.")
+    strength = extract_section(text, r"strength[\"']?\s*:\s*[\"'](.*?)[\"']", 
+                              "Core strengths provide solid foundation for growth.")
+    risk_factors = extract_section(text, r"risk[_\s]*factors[\"']?\s*:\s*[\"'](.*?)[\"']", 
+                                  "Manageable risks identified with mitigation strategies available.")
+    competitors = extract_section(text, r"competitors[\"']?\s*:\s*[\"'](.*?)[\"']", 
+                                 "Competitive landscape analysis reveals positioning opportunities.")
     
     # Extract suggestions
     critical = extract_suggestions(text, "critical")
@@ -986,6 +1171,29 @@ def extract_suggestions(text: str, category: str) -> List[str]:
                 break
     
     return suggestions[:5] if suggestions else [f"No specific {category} suggestions identified"]
+
+# Test function to verify everything works
+def test_validation_endpoint():
+    """Test the validation endpoint"""
+    print("\n" + "="*60)
+    print("TESTING VALIDATION ENDPOINT")
+    print("="*60)
+    
+    test_prompt = "An AI-powered agricultural monitoring system using drones and IoT sensors to optimize crop yields, reduce water usage, and predict crop diseases through computer vision and machine learning algorithms."
+    
+    try:
+        result = call_groq_validation(test_prompt)
+        print("✅ Validation successful!")
+        print(f"Overall Score: {result.get('overall_score')}")
+        print(f"Scores: {result.get('scores')}")
+        print(f"Verdict: {result.get('analysis', {}).get('verdict', '')[:100]}...")
+        return True
+    except Exception as e:
+        print(f"❌ Validation failed: {e}")
+        return False
+
+
+
 
 # API Endpoints
 
@@ -1095,7 +1303,6 @@ async def get_profile(current_user=Depends(get_current_user)):
 
 
 
-
 import asyncio
 import re
 import logging
@@ -1104,496 +1311,302 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 import requests
 from fastapi import HTTPException, Depends
+import uuid
 
 # Enhanced Pydantic models
+# Pydantic models for roadmap generation
 class RoadmapInput(BaseModel):
-    prompt: str = Field(..., min_length=20, description="Detailed startup idea description")
-    timeframe: str = Field(..., description="Project timeline (e.g., '3 months', '6 months', '12 months')")
-    industry: Optional[str] = Field(None, description="Industry category (e.g., 'fintech', 'edtech', 'marketplace')")
-    target_market: Optional[str] = Field(None, description="Target market or audience")
-    funding_stage: Optional[str] = Field("pre-seed", description="Current funding stage")
+    prompt: str = Field(..., min_length=30, max_length=2000)
+    timeframe: str
 
-class PhaseDetail(BaseModel):
-    name: str
-    duration: str
+class RoadmapPhase(BaseModel):
+    title: str
+    timeframe: str
     description: str
-    key_tasks: List[str]
-    implementation_steps: List[str]
-    success_metrics: List[str]
-    risks: List[str]
-    resources_needed: List[str]
-    deliverables: List[str]
+    tasks: List[str]
+    implementation: List[str]
+    resources: List[str]
+    team: List[str]
+    challenges: List[str]
 
-class RoadmapAnalysis(BaseModel):
+class RoadmapStructure(BaseModel):
     overview: str
-    phases: List[PhaseDetail]
-    total_duration: str
-    key_risks: List[str]
-    success_factors: List[str]
-    resource_requirements: Dict[str, Any]
-    competitive_considerations: List[str]
-    regulatory_considerations: List[str]
+    phases: List[RoadmapPhase]
 
 class RoadmapResponse(BaseModel):
     id: str
     prompt: str
     timeframe: str
-    industry: Optional[str]
-    target_market: Optional[str]
-    roadmap: str
-    roadmap_analysis: Optional[RoadmapAnalysis]
-    research_insights: Optional[List[str]]
+    roadmap: RoadmapStructure
     created_at: datetime
     updated_at: datetime
     user_id: str
 
-class RoadmapUpdate(BaseModel):
-    prompt: Optional[str] = None
-    timeframe: Optional[str] = None
-    industry: Optional[str] = None
-    target_market: Optional[str] = None
-    roadmap: Optional[str] = None
-
-# Enhanced AI roadmap generation with research integration
-async def call_groq_roadmap_enhanced(
-    prompt: str, 
-    timeframe: str, 
-    industry: Optional[str] = None,
-    target_market: Optional[str] = None,
-    research_papers: Optional[List[Any]] = None
-) -> tuple[str, RoadmapAnalysis]:
+def call_groq_roadmap(prompt: str, timeframe: str) -> dict:
+    """
+    Generate a detailed roadmap using GROQ API
+    """
     if not GROQ_API_KEY:
-        raise HTTPException(status_code=500, detail="GROQ_API_KEY not set in environment")
-
-    # Extract insights from research papers
-    research_insights = []
-    if research_papers:
-        for paper in research_papers[:5]:  # Use top 5 papers
-            if hasattr(paper, 'abstract') and paper.abstract:
-                abstract_summary = paper.abstract[:200] + "..." if len(paper.abstract) > 200 else paper.abstract
-                research_insights.append(f"Research insight from '{paper.title}': {abstract_summary}")
-
-    # Determine phase structure based on timeframe
-    phase_config = get_phase_configuration(timeframe)
-    
-    # Build context-aware system prompt
-    system_prompt = f"""You are an expert startup strategist and roadmap architect with deep industry knowledge. 
-    Generate a comprehensive, actionable roadmap that goes beyond generic startup advice.
-
-    CONTEXT:
-    - Startup Idea: {prompt}
-    - Industry: {industry or 'Not specified'}
-    - Target Market: {target_market or 'Not specified'}
-    - Timeframe: {timeframe}
-    - Total Phases: {phase_config['num_phases']}
-    - Phase Duration: {phase_config['phase_duration']}
-
-    RESEARCH INSIGHTS:
-    {chr(10).join(research_insights) if research_insights else 'No research data available'}
-
-    REQUIREMENTS:
-    1. Create {phase_config['num_phases']} phases, each lasting approximately {phase_config['phase_duration']}
-    2. Make each phase specific to the business model and industry
-    3. Include measurable KPIs and success criteria
-    4. Address unique technical and business challenges
-    5. Consider regulatory and compliance requirements
-    6. Include risk mitigation strategies
-    7. Specify resource allocation and team needs
-
-    INDUSTRY-SPECIFIC CONSIDERATIONS:
-    {get_industry_considerations(industry, prompt)}
-
-    Structure your response as valid JSON with this exact schema:
-    {{
-        "overview": "3-4 sentence strategic summary",
-        "phases": [
-            {{
-                "name": "Phase name",
-                "duration": "X months",
-                "description": "Detailed phase description",
-                "key_tasks": ["specific task 1", "specific task 2", "specific task 3"],
-                "implementation_steps": ["detailed step 1", "detailed step 2", "detailed step 3"],
-                "success_metrics": ["KPI 1", "KPI 2", "KPI 3"],
-                "risks": ["risk 1", "risk 2"],
-                "resources_needed": ["resource 1", "resource 2"],
-                "deliverables": ["deliverable 1", "deliverable 2"]
-            }}
-        ],
-        "key_risks": ["overall risk 1", "overall risk 2", "overall risk 3"],
-        "success_factors": ["factor 1", "factor 2", "factor 3"],
-        "resource_requirements": {{
-            "team_size": "X-Y people",
-            "estimated_budget": "$X-Y",
-            "key_hires": ["role 1", "role 2"]
-        }},
-        "competitive_considerations": ["consideration 1", "consideration 2"],
-        "regulatory_considerations": ["requirement 1", "requirement 2"]
-    }}"""
+        raise HTTPException(
+            status_code=500, 
+            detail="GROQ_API_KEY environment variable is not set."
+        )
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
-    
+
+    system_prompt = """You are an AI Startup Roadmap Generator for "Startup GPS". 
+Your role is to create detailed, actionable roadmaps for startup ideas based on the user's input and timeframe.
+
+### Instructions:
+1. Analyze the startup idea and create a phased roadmap based on the specified timeframe.
+2. Structure the roadmap with:
+   - A comprehensive 3-4 sentence overview
+   - Multiple phases (typically 3-5 phases depending on timeframe)
+   
+3. For each phase, include:
+   - Title: Clear phase name with timeframe estimate (e.g., "Phase 1: 2-4 weeks - MVP Development")
+   - Description: 2-3 sentence overview of the phase
+   - Tasks: 4-6 specific, actionable tasks
+   - Implementation: 3-5 detailed implementation steps
+   - Resources: 3-5 required resources (tools, budget, etc.)
+   - Team: 2-4 team roles needed
+   - Challenges: 2-4 potential challenges and mitigation strategies
+
+4. Ensure the roadmap is:
+   - Actionable and specific
+   - Realistic for the given timeframe
+   - Technically sound
+   - Business-focused
+   - Adaptable to the specific industry/domain
+
+5. Timeframe guidance:
+   - 3 months: 3 phases, focus on MVP and validation
+   - 6 months: 4 phases, include scaling preparation
+   - 1 year: 5 phases, comprehensive growth strategy
+   - 2 years: 6 phases, long-term vision and expansion
+
+### Response Format (JSON):
+{
+  "overview": "Comprehensive 3-4 sentence overview of the entire roadmap...",
+  "phases": [
+    {
+      "title": "Phase 1: [Timeframe] - [Phase Name]",
+      "timeframe": "e.g., 2-4 weeks",
+      "description": "2-3 sentence description...",
+      "tasks": ["Task 1", "Task 2", "Task 3", "Task 4"],
+      "implementation": ["Step 1", "Step 2", "Step 3", "Step 4"],
+      "resources": ["Resource 1", "Resource 2", "Resource 3"],
+      "team": ["Role 1", "Role 2", "Role 3"],
+      "challenges": ["Challenge 1", "Challenge 2", "Challenge 3"]
+    },
+    {
+      "title": "Phase 2: [Timeframe] - [Phase Name]",
+      "timeframe": "e.g., 5-8 weeks",
+      "description": "2-3 sentence description...",
+      "tasks": ["Task 1", "Task 2", "Task 3", "Task 4"],
+      "implementation": ["Step 1", "Step 2", "Step 3", "Step 4"],
+      "resources": ["Resource 1", "Resource 2", "Resource 3"],
+      "team": ["Role 1", "Role 2", "Role 3"],
+      "challenges": ["Challenge 1", "Challenge 2", "Challenge 3"]
+    }
+  ]
+}
+
+Provide ONLY the JSON response with no additional text."""
+
+    user_prompt = f"Create a detailed roadmap for this startup idea: {prompt}\nTimeframe: {timeframe}"
+
     payload = {
-        "model": "llama3-70b-8192",  # Using more powerful model
+        "model": "llama-3.3-70b-versatile",
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Generate a comprehensive roadmap for: {prompt}"}
+            {"role": "user", "content": user_prompt}
         ],
-        "temperature": 0.3,  # Lower temperature for more consistent output
+        "temperature": 0.4,
         "max_tokens": 4000
     }
 
     try:
+        print(f"🔄 Sending roadmap request to GROQ API...")
         response = requests.post(url, headers=headers, json=payload, timeout=60)
-        response.raise_for_status()
-        data = response.json()
-        ai_response = data["choices"][0]["message"]["content"]
         
-        # Parse JSON response
-        import json
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code, 
+                detail=f"GROQ API error: {response.text}"
+            )
+
+        data = response.json()
+        ai_text = data["choices"][0]["message"]["content"].strip()
+        
+        # Clean JSON response
+        if ai_text.startswith("```json"):
+            ai_text = ai_text[7:]
+        if ai_text.endswith("```"):
+            ai_text = ai_text[:-3]
+        ai_text = ai_text.strip()
+        
+        # Parse JSON
         try:
-            analysis_data = json.loads(ai_response)
-            roadmap_analysis = RoadmapAnalysis(**analysis_data)
-            
-            # Generate formatted roadmap text
-            roadmap_text = format_roadmap_text(roadmap_analysis)
-            
-            return roadmap_text, roadmap_analysis
-            
+            result = json.loads(ai_text)
+            print("✅ Successfully parsed roadmap JSON")
+            return result
         except json.JSONDecodeError:
-            # Fallback to text parsing if JSON fails
-            roadmap_analysis = parse_text_roadmap(ai_response)
-            return ai_response, roadmap_analysis
+            # Fallback parsing
+            return parse_roadmap_fallback(ai_text, timeframe)
             
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"Groq API request failed: {str(e)}")
+    except Exception as e:
+        print(f"❌ Roadmap generation failed: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Roadmap generation failed: {str(e)}"
+        )
 
-def get_phase_configuration(timeframe: str) -> Dict[str, Any]:
-    """Determine optimal phase structure based on timeframe"""
-    timeframe_lower = timeframe.lower()
-    
-    if "3" in timeframe_lower and "month" in timeframe_lower:
-        return {"num_phases": 3, "phase_duration": "1 month"}
-    elif "6" in timeframe_lower and "month" in timeframe_lower:
-        return {"num_phases": 4, "phase_duration": "1.5 months"}
-    elif "9" in timeframe_lower and "month" in timeframe_lower:
-        return {"num_phases": 5, "phase_duration": "1.8 months"}
-    elif "12" in timeframe_lower and "month" in timeframe_lower:
-        return {"num_phases": 6, "phase_duration": "2 months"}
-    elif "18" in timeframe_lower and "month" in timeframe_lower:
-        return {"num_phases": 8, "phase_duration": "2.25 months"}
-    else:
-        return {"num_phases": 6, "phase_duration": "2 months"}
-
-def get_industry_considerations(industry: Optional[str], prompt: str) -> str:
-    """Generate industry-specific considerations"""
-    if not industry:
-        # Try to infer industry from prompt
-        prompt_lower = prompt.lower()
-        if any(word in prompt_lower for word in ["fintech", "payment", "banking", "finance"]):
-            industry = "fintech"
-        elif any(word in prompt_lower for word in ["education", "learning", "teaching", "course"]):
-            industry = "edtech"
-        elif any(word in prompt_lower for word in ["marketplace", "peer-to-peer", "p2p", "trading"]):
-            industry = "marketplace"
-        elif any(word in prompt_lower for word in ["health", "medical", "healthcare"]):
-            industry = "healthtech"
-        elif any(word in prompt_lower for word in ["saas", "software", "platform", "api"]):
-            industry = "saas"
-    
-    considerations = {
-        "fintech": """
-        - PCI DSS compliance and financial regulations
-        - Banking partnerships and payment processor integrations
-        - KYC/AML requirements and identity verification
-        - Data security and encryption standards
-        - Regulatory approval processes (varies by jurisdiction)
-        """,
-        "edtech": """
-        - COPPA compliance for users under 13
-        - Content quality and educational effectiveness metrics
-        - Teacher/instructor onboarding and verification
-        - Learning analytics and progress tracking systems
-        - Integration with existing educational platforms
-        """,
-        "marketplace": """
-        - Two-sided market dynamics and network effects
-        - Trust and safety systems (ratings, reviews, dispute resolution)
-        - Payment processing and escrow systems
-        - Content moderation and user verification
-        - Liquidity challenges and chicken-egg problem
-        """,
-        "healthtech": """
-        - HIPAA compliance and patient data protection
-        - FDA regulatory considerations for medical devices
-        - Clinical validation and evidence generation
-        - Healthcare provider partnerships
-        - Insurance and reimbursement considerations
-        """,
-        "saas": """
-        - Scalable architecture and multi-tenancy
-        - Data security and SOC 2 compliance
-        - API design and integration capabilities
-        - Customer success and churn reduction strategies
-        - Pricing model optimization and usage tracking
-        """
-    }
-    
-    return considerations.get(industry, "General considerations: Focus on user experience, scalability, and market fit.")
-
-def format_roadmap_text(analysis: RoadmapAnalysis) -> str:
-    """Format the structured roadmap analysis into readable text"""
-    text = f"Overview:\n{analysis.overview}\n\n"
-    
-    for i, phase in enumerate(analysis.phases, 1):
-        text += f"Phase {i}: {phase.name} ({phase.duration})\n"
-        text += f"Description: {phase.description}\n\n"
-        text += "Key Tasks:\n"
-        for task in phase.key_tasks:
-            text += f"• {task}\n"
-        text += "\nImplementation Steps:\n"
-        for step in phase.implementation_steps:
-            text += f"• {step}\n"
-        text += f"\nSuccess Metrics: {', '.join(phase.success_metrics)}\n"
-        text += f"Key Risks: {', '.join(phase.risks)}\n"
-        text += f"Resources Needed: {', '.join(phase.resources_needed)}\n\n"
-    
-    text += f"Overall Success Factors: {', '.join(analysis.success_factors)}\n"
-    text += f"Key Risks: {', '.join(analysis.key_risks)}\n"
-    
-    return text
-
-def parse_text_roadmap(text: str) -> RoadmapAnalysis:
-    """Fallback parser for text-based roadmap responses"""
-    # This is a simplified parser - in production, you'd want more robust parsing
-    lines = text.split('\n')
+def parse_roadmap_fallback(text: str, timeframe: str) -> dict:
+    """
+    Fallback parser for roadmap generation
+    """
+    print("🔧 Using fallback roadmap parser")
     
     # Extract overview
-    overview = ""
+    overview_match = re.search(r"overview[\"']?\s*:\s*[\"'](.*?)[\"']", text, re.IGNORECASE | re.DOTALL)
+    overview = overview_match.group(1).strip() if overview_match else f"Comprehensive roadmap for the specified {timeframe} timeframe."
+    
+    # Extract phases
     phases = []
+    phase_pattern = r"\{.*?title[\"']?\s*:\s*[\"'](.*?)[\"'].*?timeframe[\"']?\s*:\s*[\"'](.*?)[\"'].*?description[\"']?\s*:\s*[\"'](.*?)[\"'].*?\}"
+    phase_matches = re.finditer(phase_pattern, text, re.IGNORECASE | re.DOTALL)
     
-    for line in lines:
-        if line.strip().startswith("Overview:"):
-            overview = line.replace("Overview:", "").strip()
-            break
-    
-    # Create basic phase structure
-    phase_count = 6  # Default
-    for i in range(1, phase_count + 1):
-        phases.append(PhaseDetail(
-            name=f"Phase {i}",
-            duration="2 months",
-            description="Phase description",
-            key_tasks=["Task 1", "Task 2"],
-            implementation_steps=["Step 1", "Step 2"],
-            success_metrics=["Metric 1"],
-            risks=["Risk 1"],
-            resources_needed=["Resource 1"],
-            deliverables=["Deliverable 1"]
-        ))
-    
-    return RoadmapAnalysis(
-        overview=overview or "Strategic roadmap for startup development",
-        phases=phases,
-        total_duration="12 months",
-        key_risks=["Market competition", "Resource constraints"],
-        success_factors=["Strong execution", "Market validation"],
-        resource_requirements={"team_size": "3-5 people", "estimated_budget": "$50k-100k", "key_hires": ["Developer", "Marketer"]},
-        competitive_considerations=["Market differentiation required"],
-        regulatory_considerations=["Standard business compliance"]
-    )
-
-# Enhanced API endpoints
-@app.post("/roadmaps", response_model=RoadmapResponse)
-async def create_roadmap_endpoint(
-    roadmap_input: RoadmapInput,
-    current_user: dict = Depends(get_current_user)
-):
-    user_id = str(current_user["_id"])
-    
-    try:
-        # Fetch relevant research papers for context
-        research_papers = None
-        try:
-            # Generate search terms from the startup idea
-            search_terms = generate_search_terms(roadmap_input.prompt)
-            if search_terms:
-                # Fetch papers from multiple sources
-                tasks = [
-                    fetch_semantic_scholar(search_terms, 10),
-                    fetch_arxiv(search_terms, 10),
-                    fetch_crossref(search_terms, 10)
-                ]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                research_papers = []
-                for result in results:
-                    if isinstance(result, list):
-                        research_papers.extend(result)
-        except Exception as e:
-            logging.warning(f"Research paper fetch failed: {e}")
-        
-        # Generate enhanced roadmap with research integration
-        roadmap_text, roadmap_analysis = await call_groq_roadmap_enhanced(
-            roadmap_input.prompt,
-            roadmap_input.timeframe,
-            roadmap_input.industry,
-            roadmap_input.target_market,
-            research_papers
-        )
-        
-        # Extract research insights
-        research_insights = []
-        if research_papers:
-            for paper in research_papers[:3]:
-                if hasattr(paper, 'title'):
-                    research_insights.append(f"Relevant research: {paper.title}")
-        
-        # Save to database
-        roadmap_data = {
-            "prompt": roadmap_input.prompt,
-            "timeframe": roadmap_input.timeframe,
-            "industry": roadmap_input.industry,
-            "target_market": roadmap_input.target_market,
-            "roadmap": roadmap_text,
-            "roadmap_analysis": roadmap_analysis.dict() if roadmap_analysis else None,
-            "research_insights": research_insights,
-            "user_id": user_id
+    for match in phase_matches:
+        phase = {
+            "title": match.group(1).strip(),
+            "timeframe": match.group(2).strip(),
+            "description": match.group(3).strip(),
+            "tasks": ["Develop MVP", "Conduct market research", "Build initial team", "Secure funding"],
+            "implementation": ["Create project plan", "Set up development environment", "Build core features", "Test and iterate"],
+            "resources": ["Development tools", "Initial budget", "Team members", "Market data"],
+            "team": ["Project Manager", "Developer", "Designer", "Business Analyst"],
+            "challenges": ["Technical complexity", "Market competition", "Funding constraints", "Team coordination"]
         }
+        phases.append(phase)
+    
+    # If no phases found, create default phases based on timeframe
+    if not phases:
+        phases = create_default_phases(timeframe)
+    
+    return {
+        "overview": overview,
+        "phases": phases
+    }
 
-        roadmap_id = create_roadmap(user_id, roadmap_data)
+def create_default_phases(timeframe: str) -> List[dict]:
+    """Create default phases based on timeframe"""
+    if timeframe == "3 months":
+        return [
+            {
+                "title": "Phase 1: 4 weeks - Foundation & MVP",
+                "timeframe": "4 weeks",
+                "description": "Establish project foundation and develop minimum viable product.",
+                "tasks": ["Define core features", "Set up development environment", "Build MVP", "Initial testing"],
+                "implementation": ["Create project plan", "Set up version control", "Develop core functionality", "Conduct alpha testing"],
+                "resources": ["Development tools", "Cloud infrastructure", "Team members"],
+                "team": ["Project Lead", "Developer", "Designer"],
+                "challenges": ["Scope creep", "Technical debt", "Time constraints"]
+            },
+            {
+                "title": "Phase 2: 4 weeks - Validation & Feedback",
+                "timeframe": "4 weeks",
+                "description": "Gather user feedback and validate product-market fit.",
+                "tasks": ["User testing", "Collect feedback", "Iterate on MVP", "Prepare for launch"],
+                "implementation": ["Recruit beta testers", "Conduct user interviews", "Analyze feedback", "Implement improvements"],
+                "resources": ["User testing platform", "Analytics tools", "Feedback collection system"],
+                "team": ["Product Manager", "Developer", "UX Researcher"],
+                "challenges": ["User acquisition", "Feedback quality", "Iteration speed"]
+            },
+            {
+                "title": "Phase 3: 4 weeks - Launch Preparation",
+                "timeframe": "4 weeks",
+                "description": "Final preparations for public launch and initial marketing.",
+                "tasks": ["Final testing", "Marketing materials", "Launch planning", "Team scaling"],
+                "implementation": ["Load testing", "Create marketing assets", "Plan launch campaign", "Hire additional team"],
+                "resources": ["Marketing budget", "Hosting infrastructure", "Additional team members"],
+                "team": ["Marketing Specialist", "Developer", "Operations Manager"],
+                "challenges": ["Launch timing", "Market reception", "Scaling infrastructure"]
+            }
+        ]
+    elif timeframe == "6 months":
+        # Add more phases for longer timeframes
+        return [
+            {
+                "title": "Phase 1: 6 weeks - Discovery & Planning",
+                "timeframe": "6 weeks",
+                "description": "Comprehensive market research and detailed project planning.",
+                "tasks": ["Market analysis", "Competitor research", "Feature planning", "Resource allocation"],
+                "implementation": ["Conduct market surveys", "Analyze competitors", "Create detailed spec", "Secure initial funding"],
+                "resources": ["Market research tools", "Business intelligence", "Initial capital"],
+                "team": ["Business Analyst", "Product Manager", "Market Researcher"],
+                "challenges": ["Market uncertainty", "Funding acquisition", "Planning accuracy"]
+            },
+            # Add more phases...
+        ]
+    else:
+        # Default 3-phase structure
+        return [
+            {
+                "title": "Phase 1: Foundation & MVP",
+                "timeframe": "Varies",
+                "description": "Initial setup and minimum viable product development.",
+                "tasks": ["Project setup", "Core development", "Initial testing", "Team formation"],
+                "implementation": ["Plan development", "Build core features", "Test functionality", "Assemble team"],
+                "resources": ["Development tools", "Initial budget", "Team members"],
+                "team": ["Project Manager", "Developer", "Designer"],
+                "challenges": ["Technical challenges", "Resource constraints", "Time management"]
+            }
+        ]
 
-        return RoadmapResponse(
-            id=str(roadmap_id),
+@app.post("/generate-roadmap", response_model=RoadmapResponse)
+async def generate_roadmap(roadmap_input: RoadmapInput):
+    try:
+        ai_result = call_groq_roadmap(roadmap_input.prompt, roadmap_input.timeframe)
+
+        # Ensure phases exist
+        phases = ai_result.get("phases") or create_default_phases(roadmap_input.timeframe)
+
+        roadmap_response = RoadmapResponse(
+            id=str(uuid.uuid4()),
             prompt=roadmap_input.prompt,
             timeframe=roadmap_input.timeframe,
-            industry=roadmap_input.industry,
-            target_market=roadmap_input.target_market,
-            roadmap=roadmap_text,
-            roadmap_analysis=roadmap_analysis,
-            research_insights=research_insights,
+            roadmap=RoadmapStructure(
+                overview=ai_result.get("overview", "No overview provided"),
+                phases=[
+                    RoadmapPhase(
+                        title=phase.get("title", "No title"),
+                        timeframe=phase.get("timeframe", "Varies"),
+                        description=phase.get("description", ""),
+                        tasks=phase.get("tasks", []),
+                        implementation=phase.get("implementation", []),
+                        resources=phase.get("resources", []),
+                        team=phase.get("team", []),
+                        challenges=phase.get("challenges", [])
+                    )
+                    for phase in phases
+                ]
+            ),
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
-            user_id=user_id
+            user_id="anonymous"
         )
-        
+
+        return roadmap_response
+
     except Exception as e:
-        logging.exception("Failed to create roadmap")
-        raise HTTPException(status_code=500, detail=f"Failed to generate roadmap: {str(e)}")
+        logging.exception("Roadmap generation error")
+        raise HTTPException(status_code=500, detail=f"Roadmap generation failed: {str(e)}")
 
-@app.get("/roadmaps/{roadmap_id}", response_model=RoadmapResponse)
-async def get_roadmap(
-    roadmap_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    roadmap = get_roadmap_by_id(roadmap_id)
-    if not roadmap:
-        raise HTTPException(status_code=404, detail="Roadmap not found")
-    
-    # Verify ownership
-    if roadmap.get("user_id") != str(current_user["_id"]):
-        raise HTTPException(status_code=403, detail="Not authorized to access this roadmap")
-    
-    return roadmap
-
-@app.get("/users/{user_id}/roadmaps", response_model=List[RoadmapResponse])
-async def get_user_roadmaps(
-    user_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    # Verify authorization
-    if user_id != str(current_user["_id"]):
-        raise HTTPException(status_code=403, detail="Not authorized to access these roadmaps")
-    
-    roadmaps = get_user_roadmaps_from_db(user_id)  # Renamed to avoid naming conflict
-    return roadmaps
-
-@app.put("/roadmaps/{roadmap_id}", response_model=RoadmapResponse)
-async def update_roadmap_endpoint(
-    roadmap_id: str,
-    update_data: RoadmapUpdate,
-    current_user: dict = Depends(get_current_user)
-):
-    # Verify ownership
-    roadmap = get_roadmap_by_id(roadmap_id)
-    if not roadmap:
-        raise HTTPException(status_code=404, detail="Roadmap not found")
-    if roadmap.get("user_id") != str(current_user["_id"]):
-        raise HTTPException(status_code=403, detail="Not authorized to update this roadmap")
-    
-    # If prompt or timeframe is being updated, regenerate the roadmap
-    update_dict = update_data.dict(exclude_unset=True)
-    if "prompt" in update_dict or "timeframe" in update_dict:
-        try:
-            new_prompt = update_dict.get("prompt", roadmap["prompt"])
-            new_timeframe = update_dict.get("timeframe", roadmap["timeframe"])
-            new_industry = update_dict.get("industry", roadmap.get("industry"))
-            new_target_market = update_dict.get("target_market", roadmap.get("target_market"))
-            
-            # Regenerate roadmap
-            roadmap_text, roadmap_analysis = await call_groq_roadmap_enhanced(
-                new_prompt, new_timeframe, new_industry, new_target_market
-            )
-            
-            update_dict["roadmap"] = roadmap_text
-            update_dict["roadmap_analysis"] = roadmap_analysis.dict() if roadmap_analysis else None
-            update_dict["updated_at"] = datetime.utcnow()
-            
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to regenerate roadmap: {str(e)}")
-    
-    # Perform update
-    updated = update_roadmap(roadmap_id, update_dict)
-    if updated.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Roadmap not found or no changes made")
-    
-    # Return updated roadmap
-    updated_roadmap = get_roadmap_by_id(roadmap_id)
-    return updated_roadmap
-
-@app.delete("/roadmaps/{roadmap_id}")
-async def delete_roadmap_endpoint(
-    roadmap_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    # Verify ownership
-    roadmap = get_roadmap_by_id(roadmap_id)
-    if not roadmap:
-        raise HTTPException(status_code=404, detail="Roadmap not found")
-    if roadmap.get("user_id") != str(current_user["_id"]):
-        raise HTTPException(status_code=403, detail="Not authorized to delete this roadmap")
-    
-    # Perform deletion
-    deleted = delete_roadmap(roadmap_id)
-    if deleted.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Roadmap not found")
-    
-    return {"message": "Roadmap deleted successfully"}
-
-# Add analytics endpoint
-@app.get("/roadmaps/{roadmap_id}/analytics")
-async def get_roadmap_analytics(
-    roadmap_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    roadmap = get_roadmap_by_id(roadmap_id)
-    if not roadmap or roadmap.get("user_id") != str(current_user["_id"]):
-        raise HTTPException(status_code=404, detail="Roadmap not found")
-    
-    # Generate analytics based on roadmap data
-    analytics = {
-        "phases_count": len(roadmap.get("roadmap_analysis", {}).get("phases", [])),
-        "estimated_duration": roadmap.get("timeframe"),
-        "key_risks_count": len(roadmap.get("roadmap_analysis", {}).get("key_risks", [])),
-        "success_factors_count": len(roadmap.get("roadmap_analysis", {}).get("success_factors", [])),
-        "research_papers_used": len(roadmap.get("research_insights", [])),
-        "created_at": roadmap.get("created_at"),
-        "last_updated": roadmap.get("updated_at")
-    }
-    
-    return analytics
 
 # main.py
 from fastapi import FastAPI
@@ -1621,6 +1634,124 @@ class ChatResponse(BaseModel):
 async def chat(request: ChatRequest):
     reply = chatbot.get_response(request.message)
     return {"reply": reply}
+
+@app.post("/research-papers", response_model=ResearchResponse)
+async def get_research_papers(request: ResearchRequest, current_user: Dict[str, Any] = Depends(get_current_user)) -> ResearchResponse:
+    """
+    Fetches, deduplicates, and returns a curated list of research papers
+    based on a startup idea, storing the results in the database.
+    """
+    logging.info(f"🔍 Research request received: {request.idea[:50]}...")
+    user_id = str(current_user.get("_id"))
+    
+    # 1. Input validation
+    if not request.idea or not request.idea.strip():
+        raise HTTPException(status_code=400, detail="Idea cannot be empty")
+    
+    try:
+        # 2. Generate search terms
+        search_terms = generate_search_terms(request.idea)
+        if not search_terms:
+            logging.warning("No search terms generated. Using original idea as a fallback.")
+            search_terms = [request.idea]
+        
+        logging.info(f"🔍 Generated search terms: {search_terms}")
+        
+        # 3. Concurrently fetch papers from all sources
+        tasks = [
+            fetch_semantic_scholar(search_terms, request.max_results),
+            fetch_arxiv(search_terms, request.max_results),
+            fetch_crossref(search_terms, request.max_results)
+        ]
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        all_papers: List[ResearchPaper] = []
+        source_names = ["Semantic Scholar", "arXiv", "CrossRef"]
+        
+        for i, result in enumerate(results):
+            source_name = source_names[i]
+            if isinstance(result, Exception):
+                logging.error(f"⚠️ {source_name} failed with an error: {result}")
+            elif isinstance(result, list):
+                # Ensure each item in the list is the expected type
+                for paper in result:
+                    if isinstance(paper, ResearchPaper):
+                        all_papers.append(paper)
+                    else:
+                        logging.warning(f"⚠️ Unexpected paper type from {source_name}: {type(paper)}")
+            else:
+                logging.warning(f"⚠️ Unexpected response from {source_name}: {type(result)}")
+        
+        logging.info(f"📊 Total papers fetched: {len(all_papers)}")
+        
+        # 4. Deduplicate and normalize papers
+        unique_papers: List[ResearchPaper] = []
+        seen_titles: Set[str] = set()
+        
+        for paper in all_papers:
+            if not paper.title or not paper.title.strip():
+                continue
+            
+            # Normalize title for case-insensitive comparison
+            normalized_title = re.sub(r'[^\w\s]', '', paper.title.lower())
+            normalized_title = re.sub(r'\s+', ' ', normalized_title).strip()
+            
+            if normalized_title and normalized_title not in seen_titles:
+                seen_titles.add(normalized_title)
+                unique_papers.append(paper)
+        
+        # 5. Score and sort unique papers
+        unique_papers.sort(key=paper_score, reverse=True)
+        
+        # 6. Balance sources and limit final results
+        final_papers: List[ResearchPaper] = []
+        source_counts: Dict[str, int] = {source: 0 for source in source_names}
+        max_per_source = max(2, request.max_results // 3)
+        
+        # Distribute papers, ensuring a balance of sources
+        for paper in unique_papers:
+            if len(final_papers) >= request.max_results:
+                break
+            if source_counts[paper.source] < max_per_source:
+                final_papers.append(paper)
+                source_counts[paper.source] += 1
+        
+        # Fill any remaining slots with the highest-ranked papers regardless of source
+        if len(final_papers) < request.max_results:
+            remaining_papers = [p for p in unique_papers if p not in final_papers]
+            final_papers.extend(remaining_papers[:request.max_results - len(final_papers)])
+
+        logging.info(f"✅ Final result: {len(final_papers)} curated papers")
+        
+        if not final_papers:
+            logging.warning("⚠️ No papers found from any source.")
+            return ResearchResponse(papers=[], search_terms=search_terms, research_id="none", created_at=None)
+
+        # 7. Prepare and save data to the database
+        paper_data_list = [p.dict() for p in final_papers]
+        research_doc = {
+            "idea": request.idea,
+            "search_terms": search_terms,
+            "papers": paper_data_list,
+        }
+        
+        research_id = save_research(user_id, research_doc)
+        
+        return ResearchResponse(
+            papers=final_papers,
+            search_terms=search_terms,
+            research_id=research_id,
+            created_at=datetime.utcnow()
+        )
+        
+    except HTTPException:
+        # Re-raise explicit HTTPException
+        raise
+    except Exception as e:
+        logging.exception("❌ An unhandled error occurred in the research papers endpoint")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch research papers: {str(e)}")
+
 
 @app.get("/")
 def root():
