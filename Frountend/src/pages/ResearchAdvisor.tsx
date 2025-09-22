@@ -149,7 +149,7 @@ export default function ResearchAdvisor() {
             <div className="inline-flex items-center space-x-3 mb-4">
               <div className="text-4xl">🧠</div>
               <h1 className="text-5xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                Research Advisor
+                Research Finder
               </h1>
               <div className="text-4xl text-cyan-400">✨</div>
             </div>

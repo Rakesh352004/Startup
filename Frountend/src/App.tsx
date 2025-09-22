@@ -13,6 +13,7 @@ import ResearchAdvisor from "./pages/ResearchAdvisor";
 import Header from "./components/Header";
 import RoadmapGenerator from "./pages/RoadmapGenerator";
 import Contact from "./pages/Help";
+import TeamFinder from "./pages/TeamFinder";
 
 function Layout() {
   const location = useLocation();
@@ -51,6 +52,8 @@ function Layout() {
               <Route path="/research-papers" element={<ResearchAdvisor />} />
               <Route path="/roadmap" element={<RoadmapGenerator />} />
               <Route path="/help" element={<Contact />} />
+              {/* In your App.tsx Layout component, add this route: */}
+              <Route path="/team-maker" element={<TeamFinder />} />
             </Routes>
           </main>
         </div>

@@ -1,7 +1,6 @@
 import React, { useState } from "react";
-import axios from "axios";
+import { apiService } from '../services/api'; // ADD THIS IMPORT
 
-// === Types ===
 interface RoadmapPhase {
   title: string;
   timeframe: string;
@@ -114,6 +113,7 @@ const RoadmapGeneration: React.FC = () => {
     setExpandedPhase(expandedPhase === phaseIndex ? null : phaseIndex);
   };
 
+  // FIXED: Use apiService instead of direct axios
   const handleGenerateRoadmap = async () => {
     if (!isValidIdea) {
       setError("Please enter at least 30 characters to generate a meaningful roadmap");
@@ -126,21 +126,19 @@ const RoadmapGeneration: React.FC = () => {
     setExpandedPhase(null);
 
     try {
-      const API_URL = "http://127.0.0.1:8000/generate-roadmap";
+      // Use apiService instead of direct axios call
+      const response = await apiService.generateRoadmap({
+        prompt: ideaPrompt,
+        timeframe: timeframe
+      });
       
-      const response = await axios.post<RoadmapResponse>(
-        API_URL,
-        { 
-          prompt: ideaPrompt,
-          timeframe: timeframe
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: 60000
-        }
-      );
+      if (response.error) {
+        throw new Error(response.error);
+      }
+      
+      if (!response.data) {
+        throw new Error("No data received from server");
+      }
       
       console.log("Roadmap response:", response.data);
       setRoadmapResult(response.data);
