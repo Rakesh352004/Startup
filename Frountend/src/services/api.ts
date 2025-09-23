@@ -1,4 +1,4 @@
-// src/services/api.ts
+// src/services/api.ts - Complete Updated Version with Team Finder Focus
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
 interface ApiResponse<T> {
@@ -8,7 +8,7 @@ interface ApiResponse<T> {
 }
 
 class ApiService {
- private getAuthHeaders(): HeadersInit {
+  private getAuthHeaders(): HeadersInit {
     const token = localStorage.getItem("token") || sessionStorage.getItem("token");
     return {
       "Content-Type": "application/json",
@@ -32,15 +32,12 @@ class ApiService {
       const status = response.status;
 
       if (status === 401) {
-        // Token expired or invalid - only redirect if user was expecting to be authenticated
         const token = localStorage.getItem("token") || sessionStorage.getItem("token");
         if (token) {
           localStorage.removeItem("token");
           sessionStorage.removeItem("token");
-          // Only redirect if they had a token (were logged in)
           window.location.href = "/signin";
         }
-        // For endpoints that work without auth, continue processing
       }
 
       if (!response.ok) {
@@ -62,6 +59,21 @@ class ApiService {
     }
   }
 
+  // Authentication Methods
+  async login(credentials: LoginCredentials) {
+    return this.makeRequest<LoginResponse>("/login", {
+      method: "POST",
+      body: JSON.stringify(credentials),
+    });
+  }
+
+  async register(userData: RegisterData) {
+    return this.makeRequest<RegisterResponse>("/register", {
+      method: "POST",
+      body: JSON.stringify(userData),
+    });
+  }
+
   // User Profile Methods
   async getUserProfile() {
     return this.makeRequest<UserProfile>("/profile");
@@ -81,22 +93,7 @@ class ApiService {
     });
   }
 
-  // Authentication Methods
-  async login(credentials: LoginCredentials) {
-    return this.makeRequest<LoginResponse>("/login", {
-      method: "POST",
-      body: JSON.stringify(credentials),
-    });
-  }
-
-  async register(userData: RegisterData) {
-    return this.makeRequest<RegisterResponse>("/register", {
-      method: "POST",
-      body: JSON.stringify(userData),
-    });
-  }
-
-  // Idea Validation - Updated endpoint and response type
+  // Idea Validation
   async validateIdea(prompt: string) {
     return this.makeRequest<ValidationResponse>("/validate-idea", {
       method: "POST",
@@ -104,7 +101,7 @@ class ApiService {
     });
   }
 
-  // Roadmap Methods - Updated endpoints
+  // Roadmap Methods
   async generateRoadmap(roadmapData: RoadmapInput) {
     return this.makeRequest<RoadmapResponse>("/generate-roadmap", {
       method: "POST",
@@ -114,23 +111,6 @@ class ApiService {
 
   async getUserRoadmaps() {
     return this.makeRequest<{ roadmaps: RoadmapResponse[]; total: number }>("/user/roadmaps");
-  }
-
-  async getRoadmap(roadmapId: string) {
-    return this.makeRequest<RoadmapResponse>(`/roadmaps/${roadmapId}`);
-  }
-
-  async updateRoadmap(roadmapId: string, updateData: Partial<RoadmapInput>) {
-    return this.makeRequest<RoadmapResponse>(`/roadmaps/${roadmapId}`, {
-      method: "PUT",
-      body: JSON.stringify(updateData),
-    });
-  }
-
-  async deleteRoadmap(roadmapId: string) {
-    return this.makeRequest<{ message: string }>(`/roadmaps/${roadmapId}`, {
-      method: "DELETE",
-    });
   }
 
   // Research Methods
@@ -145,10 +125,6 @@ class ApiService {
     return this.makeRequest<{ research: ResearchHistoryItem[]; total: number }>("/user/research");
   }
 
-  async getResearchById(researchId: string) {
-    return this.makeRequest<ResearchHistoryItem>(`/research/${researchId}`);
-  }
-
   // User Data Methods
   async getUserIdeas() {
     return this.makeRequest<{ ideas: IdeaHistoryItem[]; total: number }>("/user/ideas");
@@ -158,67 +134,125 @@ class ApiService {
     return this.makeRequest<UserActivityStats>("/user/activity");
   }
 
-  async exportUserData() {
-    return this.makeRequest<{ data: any }>("/user/export");
+  // ==============================================
+  // TEAM FINDER CORE FUNCTIONALITY
+  // ==============================================
+
+// Team Finder Methods
+async searchTeamMembers(searchData: TeamSearchInput) {
+  return this.makeRequest<{ profiles: TeamMemberProfile[]; total: number }>("/api/team-search", {
+    method: "POST",
+    body: JSON.stringify(searchData),
+  });
+}
+
+// Connection Request Methods
+async sendConnectionRequest(receiverId: string, message = '') {
+  return this.makeRequest<{ request_id: string; status: string }>("/api/connection-requests", {
+    method: "POST",
+    body: JSON.stringify({ receiver_id: receiverId, message }),
+  });
+}
+
+async getReceivedConnectionRequests() {
+  return this.makeRequest<{ requests: ConnectionRequest[]; total: number }>("/api/connection-requests/received");
+}
+
+async getSentConnectionRequests() {
+  return this.makeRequest<{ requests: ConnectionRequest[]; total: number }>("/api/connection-requests/sent");
+}
+
+async respondToConnectionRequest(requestId: string, action: 'accept' | 'reject') {
+  return this.makeRequest<{ message: string }>(`/api/connection-requests/${requestId}/respond`, {
+    method: "POST",
+    body: JSON.stringify({ action }),
+  });
+}
+
+async checkConnectionStatus(targetUserId: string) {
+  return this.makeRequest<{ status: string }>(`/api/connection-status/${targetUserId}`);
+}
+
+// Connection Management
+async getConnections() {
+  return this.makeRequest<{ connections: TeamMemberProfile[] }>("/api/connections");
+}
+
+async removeConnection(targetUserId: string) {
+  return this.makeRequest<{ message: string }>(`/api/connections/${targetUserId}`, {
+    method: "DELETE",
+  });
+}
+
+// Chat Methods
+async createConversation(targetUserId: string) {
+  return this.makeRequest<{ id: string; participant_ids: string[]; participant_names: string[] }>("/api/conversations", {
+    method: "POST",
+    body: JSON.stringify({ target_user_id: targetUserId }),
+  });
+}
+
+async getConversations() {
+  return this.makeRequest<{ conversations: Conversation[] }>("/api/conversations");
+}
+
+async sendMessage(conversationId: string, content: string) {
+  return this.makeRequest<Message>("/api/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      content,
+      message_type: "text"
+    }),
+  });
+}
+
+async getMessages(conversationId: string, skip = 0, limit = 50) {
+  return this.makeRequest<{ messages: Message[] }>(`/api/messages/${conversationId}?skip=${skip}&limit=${limit}`);
+}
+
+  // Health Check
+  async healthCheck() {
+    return this.makeRequest<HealthCheckResponse>("/health");
   }
 
-  async deleteUserData() {
-    return this.makeRequest<{ message: string }>("/user/data", {
-      method: "DELETE",
-    });
-  }
-
-  // Team Building Methods
-  async searchTeamMembers(searchData: TeamSearchInput) {
-    return this.makeRequest<TeamSearchResponse>("/api/team-searches", {
-      method: "POST",
-      body: JSON.stringify(searchData),
-    });
-  }
-
-  async getAllProfiles() {
-    return this.makeRequest<{ profiles: ProfileResponse[] }>("/api/profiles/all");
-  }
-
-  async getMyTeamSearches() {
-    return this.makeRequest<{ searches: TeamSearchHistory[] }>("/api/my-team-searches");
-  }
-
-  // Chat Methods
+  // Legacy Chat Methods (for existing Help component)
   async sendChatMessage(message: ChatMessage) {
     return this.makeRequest<ChatResponse>("/chat", {
       method: "POST",
       body: JSON.stringify(message),
     });
   }
-
-  async getChatSessions() {
-    return this.makeRequest<ChatHistoryResponse>("/chat/sessions");
-  }
-
-  async deleteChatSession(sessionId: string) {
-    return this.makeRequest<{ message: string }>(`/chat/sessions/${sessionId}`, {
-      method: "DELETE",
-    });
-  }
-
-  async clearChatSession(sessionId: string) {
-    return this.makeRequest<{ message: string }>(`/chat/sessions/${sessionId}/clear`, {
-      method: "POST",
-    });
-  }
-
-  async getChatSuggestions() {
-    return this.makeRequest<ChatSuggestionsResponse>("/chat/suggestions");
-  }
-
-  // Health Check
-  async healthCheck() {
-    return this.makeRequest<HealthCheckResponse>("/health");
-  }
 }
 
-// Updated Type Definitions
+// ==============================================
+// TYPE DEFINITIONS
+// ==============================================
+
+// Authentication Types
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+}
+
+export interface RegisterData {
+  name: string;
+  email: string;
+  password: string;
+  confirm_password: string;
+}
+
+export interface RegisterResponse {
+  id: string;
+  email: string;
+}
+
+// User Profile Types
 export interface UserProfile {
   name: string;
   email: string;
@@ -247,28 +281,7 @@ export interface UserProfileCreate {
   location?: string;
 }
 
-export interface LoginCredentials {
-  email: string;
-  password: string;
-}
-
-export interface LoginResponse {
-  access_token: string;
-  token_type: string;
-}
-
-export interface RegisterData {
-  name: string;
-  email: string;
-  password: string;
-  confirm_password: string;
-}
-
-export interface RegisterResponse {
-  id: string;
-  email: string;
-}
-
+// Idea Validation Types
 export interface ValidationDetails {
   verdict: string;
   feasibility: string;
@@ -276,7 +289,7 @@ export interface ValidationDetails {
   uniqueness: string;
   strength: string;
   riskFactors: string;
-  riskMitigation: string;  // This must be here
+  riskMitigation: string;
   existingCompetitors: string;
 }
 
@@ -313,7 +326,7 @@ export interface IdeaHistoryItem {
   user_id: string;
 }
 
-// Updated Roadmap Types
+// Roadmap Types
 export interface RoadmapInput {
   prompt: string;
   timeframe: string;
@@ -389,7 +402,11 @@ export interface UserActivityStats {
   total_activity: number;
 }
 
-// Team Building Types
+// ==============================================
+// TEAM FINDER CORE TYPES
+// ==============================================
+
+// Team Search Types
 export interface TeamSearchInput {
   required_skills: string[];
   preferred_role?: string;
@@ -400,36 +417,71 @@ export interface TeamSearchInput {
   additional_requirements?: string;
 }
 
-export interface ProfileResponse {
+export interface TeamMemberProfile {
   id: string;
   name: string;
   email: string;
   phone?: string;
-  role?: string;
+  role: string;
   skills: string[];
   interests: string[];
-  preferred_role?: string;
-  experience?: string;
-  availability?: string;
-  location?: string;
-  match_score?: number;
-  matched_skills?: string[];
-  matched_interests?: string[];
+  preferred_role: string;
+  experience: string;
+  availability: string;
+  location: string;
+  match_score: number;
+  matched_skills: string[];
+  matched_interests: string[];
+  connection_status: 'not_connected' | 'request_sent' | 'request_received' | 'connected';
 }
 
 export interface TeamSearchResponse {
-  profiles: ProfileResponse[];
+  profiles: TeamMemberProfile[];
   search_id: string;
   total_matches: number;
 }
 
-export interface TeamSearchHistory {
+// Connection Request Types
+export interface ConnectionRequestInput {
+  receiver_id: string;
+  message?: string;
+}
+
+export interface ConnectionRequest {
   id: string;
-  search_criteria: TeamSearchInput;
+  sender_id: string;
+  receiver_id: string;
+  sender_name: string;
+  sender_email: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  message: string;
+  created_at: string;
+  user_profile?: any;
+}
+
+// Chat Types (for connected users)
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  sender_name: string;
+  content: string;
+  message_type: string;
+  timestamp: string;
+  read: boolean;
+}
+
+export interface Conversation {
+  id: string;
+  participant_ids: string[];
+  participant_names: string[];
+  last_message?: string;
+  last_message_time?: string;
+  unread_count: number;
   created_at: string;
 }
 
-// Chat Types
+// Legacy Chat Types (for Help component)
 export interface ChatMessage {
   message: string;
   session_id?: string;
@@ -443,27 +495,6 @@ export interface ChatResponse {
   follow_ups: string[];
   session_id: string;
   timestamp: string;
-}
-
-export interface ChatSession {
-  session_id: string;
-  messages: Array<{
-    role: string;
-    content: string;
-    timestamp: string;
-  }>;
-  created_at: string;
-  last_activity: string;
-}
-
-export interface ChatHistoryResponse {
-  sessions: ChatSession[];
-  total_sessions: number;
-}
-
-export interface ChatSuggestionsResponse {
-  suggestions: string[];
-  categories: Record<string, string[]>;
 }
 
 // Health Check Type

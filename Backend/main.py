@@ -19,18 +19,27 @@ from bson import ObjectId
 from dotenv import load_dotenv
 from datetime import datetime
 import uuid
-# Database imports
 from database import (
     users_collection, ideas_collection, profiles_collection, roadmaps_collection, 
-    research_collection, db,
-    hash_password, verify_password, create_access_token,
-    get_user_by_id, get_user_profile, update_user_profile,
-    create_roadmap, get_roadmap_by_id, get_user_roadmaps,
-    update_roadmap, delete_roadmap, save_research, get_research_by_id, 
-    get_user_research_history, save_idea_validation, get_user_ideas,
-    get_user_activity, get_user_stats, delete_user_data,connections_collection
+    research_collection, db, hash_password, verify_password, create_access_token,
+    get_user_by_id, get_user_profile, update_user_profile, create_roadmap, 
+    get_user_roadmaps, save_research, get_user_research_history, save_idea_validation, 
+    get_user_ideas, get_user_activity, get_user_stats, delete_user_data,
+    
+    # Updated imports with corrected function names:
+    create_connection_request, 
+    get_connection_requests_fixed as get_connection_requests, 
+    respond_to_connection_request_fixed as respond_to_connection_request,
+    get_connection_status_fixed as get_connection_status, 
+    get_connected_profiles_fixed as get_connected_profiles, 
+    create_conversation_fixed as create_conversation, 
+    send_message_fixed as send_message, 
+    get_messages_fixed as get_messages
 )
 from enhanced_chatbot import StartupGPSChatbotEnhanced, integrate_enhanced_chatbot_with_main
+from typing import List, Optional, Dict, Any
+from datetime import datetime, timedelta
+from pydantic import BaseModel
 
 # Enhanced chatbot imports (if available)
 try:
@@ -221,39 +230,20 @@ class TeamSearchInput(BaseModel):
     availability: Optional[str] = None
     location: Optional[str] = None
     interests: List[str] = []
-    additional_requirements: Optional[str] = None
 
-class MatchedProfileResponse(BaseModel):
-    id: str
-    name: str
-    email: str
-    phone: Optional[str] = None
-    role: Optional[str] = None
-    skills: List[str]
-    interests: List[str]
-    preferred_role: Optional[str] = None
-    experience: Optional[str] = None
-    availability: Optional[str] = None
-    location: Optional[str] = None
-    match_score: int
-    matched_skills: List[str]
-    matched_interests: List[str]
+class ConnectionRequestInput(BaseModel):
+    receiver_id: str
+    message: str = ""
 
-class TeamSearchResponse(BaseModel):
-    profiles: List[MatchedProfileResponse]
-    search_id: str
-    total_matches: int
+class ConnectionResponseInput(BaseModel):
+    action: str  # "accept" or "reject"
 
-class ConnectionRequest(BaseModel):
-    target_user_id: str
+class MessageInput(BaseModel):
+    conversation_id: str
+    content: str
 
-class ConnectionResponse(BaseModel):
-    id: str
-    user_id: str
-    target_user_id: str
-    status: str  # 'connected' or 'disconnected'
-    created_at: datetime
-    updated_at: datetime
+
+
 
 # ==========================================
 # HELPER FUNCTIONS
@@ -1292,219 +1282,50 @@ async def fetch_crossref(search_terms: List[str], max_results: int) -> List[Rese
         logger.warning(f"CrossRef fetch failed: {e}")
         return []
 
-def save_team_search(user_id: str, search_data: dict) -> str:
-    """Save a team search to the database"""
-    try:
-        search_doc = {
-            "user_id": ObjectId(user_id),
-            "search_criteria": search_data,
-            "created_at": datetime.utcnow()
-        }
-        result = team_searches_collection.insert_one(search_doc)
-        return str(result.inserted_id)
-    except Exception as e:
-        print(f"Error saving team search: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save search")
 
-def calculate_profile_match_score(profile: dict, requirements: dict) -> tuple[int, List[str], List[str]]:
-    """Calculate match score between profile and requirements"""
+def calculate_match_score_and_details(profile: dict, requirements: dict) -> tuple:
+    """Calculate match score and matched items"""
     score = 0
-    total_criteria = 0
     matched_skills = []
     matched_interests = []
     
-    # Skills matching (40% weight)
+    # Skills matching (60% weight)
     if requirements.get("required_skills"):
         profile_skills = profile.get("skills", [])
         req_skills = requirements["required_skills"]
         
         for skill in profile_skills:
             for req_skill in req_skills:
-                if (skill.lower() in req_skill.lower() or 
-                    req_skill.lower() in skill.lower()):
+                if (skill.lower() in req_skill.lower() or req_skill.lower() in skill.lower()):
                     if skill not in matched_skills:
                         matched_skills.append(skill)
         
         if req_skills:
             skill_match_ratio = len(matched_skills) / len(req_skills)
-            score += skill_match_ratio * 40
-        total_criteria += 40
+            score += skill_match_ratio * 60
     
-    # Interests matching (25% weight)
+    # Experience matching (20% weight)
+    if requirements.get("experience") and profile.get("experience"):
+        if profile.get("experience") == requirements["experience"]:
+            score += 20
+    
+    # Interests matching (20% weight)
     if requirements.get("interests"):
         profile_interests = profile.get("interests", [])
         req_interests = requirements["interests"]
         
         for interest in profile_interests:
             for req_interest in req_interests:
-                if (interest.lower() in req_interest.lower() or 
-                    req_interest.lower() in interest.lower()):
+                if (interest.lower() in req_interest.lower() or req_interest.lower() in interest.lower()):
                     if interest not in matched_interests:
                         matched_interests.append(interest)
         
         if req_interests:
             interest_match_ratio = len(matched_interests) / len(req_interests)
-            score += interest_match_ratio * 25
-        total_criteria += 25
+            score += interest_match_ratio * 20
     
-    # Experience matching (15% weight)
-    if requirements.get("experience"):
-        if profile.get("experience") == requirements["experience"]:
-            score += 15
-    total_criteria += 15
-    
-    # Availability matching (10% weight)
-    if requirements.get("availability"):
-        if profile.get("availability") == requirements["availability"]:
-            score += 10
-    total_criteria += 10
-    
-    # Preferred role matching (10% weight)
-    if requirements.get("preferred_role"):
-        profile_role = profile.get("preferred_role", "").lower()
-        req_role = requirements["preferred_role"].lower()
-        if req_role in profile_role:
-            score += 10
-    total_criteria += 10
-    
-    final_score = min(100, max(0, int((score / total_criteria) * 100)))
+    final_score = min(100, max(0, int(score)))
     return final_score, matched_skills, matched_interests
-
-def find_matching_profiles(requirements: dict, exclude_user_id: str, limit: int = 10) -> List[dict]:
-    """Find profiles matching the search requirements"""
-    try:
-        # Build MongoDB query
-        query = {"user_id": {"$ne": ObjectId(exclude_user_id)}}
-        
-        # Get all profiles (we'll do matching in Python for more flexibility)
-        profiles_cursor = profiles_collection.find(query)
-        
-        matched_profiles = []
-        
-        for profile in profiles_cursor:
-            # Calculate match score
-            match_score, matched_skills, matched_interests = calculate_profile_match_score(
-                profile, requirements
-            )
-            
-            # Only include profiles with decent match scores
-            if match_score >= 30:
-                # Get user details for this profile
-                user = users_collection.find_one({"_id": profile["user_id"]})
-                if user:
-                    matched_profile = {
-                        "id": str(profile["user_id"]),
-                        "name": user.get("name", "Unknown"),
-                        "email": user.get("email", ""),
-                        "phone": profile.get("phone", ""),
-                        "role": profile.get("role", ""),
-                        "skills": profile.get("skills", []),
-                        "interests": profile.get("interests", []),
-                        "preferred_role": profile.get("preferred_role", ""),
-                        "experience": profile.get("experience", ""),
-                        "availability": profile.get("availability", ""),
-                        "location": profile.get("location", ""),
-                        "match_score": match_score,
-                        "matched_skills": matched_skills,
-                        "matched_interests": matched_interests
-                    }
-                    matched_profiles.append(matched_profile)
-        
-        # Sort by match score (highest first)
-        matched_profiles.sort(key=lambda x: x["match_score"], reverse=True)
-        
-        # Return top matches
-        return matched_profiles[:limit]
-        
-    except Exception as e:
-        print(f"Error finding matching profiles: {e}")
-        return []
-    
-def create_connection(user_id: str, target_user_id: str) -> str:
-    """Create a new connection between two users"""
-    try:
-        # Check if connection already exists
-        existing = connections_collection.find_one({
-            "user_id": ObjectId(user_id),
-            "target_user_id": ObjectId(target_user_id)
-        })
-        
-        if existing:
-            # Update existing connection to connected
-            connections_collection.update_one(
-                {"_id": existing["_id"]},
-                {
-                    "$set": {
-                        "status": "connected",
-                        "updated_at": datetime.utcnow()
-                    }
-                }
-            )
-            return str(existing["_id"])
-        else:
-            # Create new connection
-            connection_doc = {
-                "user_id": ObjectId(user_id),
-                "target_user_id": ObjectId(target_user_id),
-                "status": "connected",
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
-            }
-            result = connections_collection.insert_one(connection_doc)
-            return str(result.inserted_id)
-            
-    except Exception as e:
-        print(f"Error creating connection: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create connection")
-
-def remove_connection(user_id: str, target_user_id: str) -> bool:
-    """Remove connection between two users"""
-    try:
-        result = connections_collection.update_one(
-            {
-                "user_id": ObjectId(user_id),
-                "target_user_id": ObjectId(target_user_id)
-            },
-            {
-                "$set": {
-                    "status": "disconnected",
-                    "updated_at": datetime.utcnow()
-                }
-            }
-        )
-        return result.modified_count > 0
-    except Exception as e:
-        print(f"Error removing connection: {e}")
-        return False
-
-def get_user_connections(user_id: str) -> List[str]:
-    """Get list of connected user IDs for a user"""
-    try:
-        connections = connections_collection.find({
-            "user_id": ObjectId(user_id),
-            "status": "connected"
-        })
-        return [str(conn["target_user_id"]) for conn in connections]
-    except Exception as e:
-        print(f"Error getting connections: {e}")
-        return []
-
-def check_connection_status(user_id: str, target_user_id: str) -> str:
-    """Check if two users are connected"""
-    try:
-        connection = connections_collection.find_one({
-            "user_id": ObjectId(user_id),
-            "target_user_id": ObjectId(target_user_id)
-        })
-        
-        if connection:
-            return connection.get("status", "disconnected")
-        return "disconnected"
-    except Exception as e:
-        print(f"Error checking connection status: {e}")
-        return "disconnected"
-
-
 # ==========================================
 # API ENDPOINTS
 # ==========================================
@@ -2594,232 +2415,192 @@ async def check_collections(current_user=Depends(get_current_user)):
             "user_id": str(current_user["_id"]) if current_user else None
         }
     
-@app.post("/api/connections", response_model=ConnectionResponse)
-async def create_user_connection(
-    connection_request: ConnectionRequest,
-    current_user=Depends(get_current_user)
-):
-    """Create a connection with another user"""
+
+
+@app.post("/api/team-search")
+async def search_team_members(search_input: TeamSearchInput, current_user=Depends(get_current_user)):
+    """Search for team members based on requirements"""
     try:
         user_id = str(current_user["_id"])
-        target_user_id = connection_request.target_user_id
         
-        # Validate target user exists
-        target_user = users_collection.find_one({"_id": ObjectId(target_user_id)})
-        if not target_user:
-            raise HTTPException(status_code=404, detail="Target user not found")
+        # Get all profiles except current user
+        query = {"user_id": {"$ne": ObjectId(user_id)}}
+        profiles_cursor = profiles_collection.find(query)
         
-        # Can't connect to yourself
-        if user_id == target_user_id:
-            raise HTTPException(status_code=400, detail="Cannot connect to yourself")
+        matched_profiles = []
         
-        connection_id = create_connection(user_id, target_user_id)
+        for profile in profiles_cursor:
+            # Calculate match score
+            match_score, matched_skills, matched_interests = calculate_match_score_and_details(profile, search_input.dict())
+            
+            # Only include profiles with decent match scores
+            if match_score >= 30:
+                # Get user details
+                user = users_collection.find_one({"_id": profile["user_id"]})
+                if user:
+                    profile_id = str(profile["user_id"])
+                    connection_status = get_connection_status(user_id, profile_id)
+                    
+                    matched_profile = {
+                        "id": profile_id,
+                        "name": user.get("name", "Unknown"),
+                        "email": user.get("email", ""),
+                        "phone": profile.get("phone", ""),
+                        "role": profile.get("role", ""),
+                        "skills": profile.get("skills", []),
+                        "interests": profile.get("interests", []),
+                        "preferred_role": profile.get("preferred_role", ""),
+                        "experience": profile.get("experience", ""),
+                        "availability": profile.get("availability", ""),
+                        "location": profile.get("location", ""),
+                        "match_score": match_score,
+                        "matched_skills": matched_skills,
+                        "matched_interests": matched_interests,
+                        "connection_status": connection_status
+                    }
+                    matched_profiles.append(matched_profile)
         
-        return ConnectionResponse(
-            id=connection_id,
-            user_id=user_id,
-            target_user_id=target_user_id,
-            status="connected",
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        )
+        # Sort by match score
+        matched_profiles.sort(key=lambda x: x["match_score"], reverse=True)
+        
+        return {"profiles": matched_profiles[:20], "total": len(matched_profiles)}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create connection: {str(e)}")
+        logger.error(f"Team search failed: {e}")
+        raise HTTPException(status_code=500, detail="Search failed")
 
-@app.delete("/api/connections/{target_user_id}")
-async def remove_user_connection(
-    target_user_id: str,
+@app.post("/api/connection-requests")
+async def send_connection_request_api(request_data: ConnectionRequestInput, current_user=Depends(get_current_user)):
+    """Send connection request"""
+    try:
+        sender_id = str(current_user["_id"])
+        receiver_id = request_data.receiver_id
+        
+        # Check if receiver exists
+        receiver = get_user_by_id(receiver_id)
+        if not receiver:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        if sender_id == receiver_id:
+            raise HTTPException(status_code=400, detail="Cannot send request to yourself")
+        
+        request_id = create_connection_request(sender_id, receiver_id, request_data.message)
+        
+        return {"request_id": request_id, "status": "sent"}
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to send request")
+
+@app.get("/api/connection-requests/received")
+async def get_received_requests(current_user=Depends(get_current_user)):
+    """Get received connection requests"""
+    try:
+        user_id = str(current_user["_id"])
+        requests = get_connection_requests(user_id, "received")
+        return {"requests": requests, "total": len(requests)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to get requests")
+
+@app.post("/api/connection-requests/{request_id}/respond")
+async def respond_to_request(
+    request_id: str, 
+    response_data: ConnectionResponseInput, 
     current_user=Depends(get_current_user)
 ):
-    """Remove a connection with another user"""
+    """Accept or reject connection request"""
     try:
         user_id = str(current_user["_id"])
         
-        success = remove_connection(user_id, target_user_id)
+        if response_data.action not in ["accept", "reject"]:
+            raise HTTPException(status_code=400, detail="Invalid action")
+        
+        success = respond_to_connection_request(request_id, response_data.action, user_id)
         
         if not success:
-            raise HTTPException(status_code=404, detail="Connection not found")
+            raise HTTPException(status_code=400, detail="Failed to process request")
         
-        return {"message": "Connection removed successfully"}
+        return {"message": f"Request {response_data.action}ed successfully"}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to remove connection: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to respond")
+
+@app.get("/api/connection-status/{target_user_id}")
+async def check_connection_status_api(target_user_id: str, current_user=Depends(get_current_user)):
+    """Check connection status"""
+    try:
+        user_id = str(current_user["_id"])
+        status = get_connection_status(user_id, target_user_id)
+        return {"status": status}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to check status")
 
 @app.get("/api/connections")
-async def get_my_connections(current_user=Depends(get_current_user)):
-    """Get user's connections with full profile data"""
+async def get_connections_api(current_user=Depends(get_current_user)):
+    """Get connected users"""
     try:
         user_id = str(current_user["_id"])
-        connected_user_ids = get_user_connections(user_id)
-        
-        # Get full profile data for connected users
-        connected_profiles = []
-        
-        for target_user_id in connected_user_ids:
-            # Get user details
-            user = users_collection.find_one({"_id": ObjectId(target_user_id)})
-            if user:
-                # Get profile details
-                profile = profiles_collection.find_one({"user_id": ObjectId(target_user_id)}) or {}
-                
-                profile_data = {
-                    "id": target_user_id,
-                    "name": user.get("name", "Unknown"),
-                    "email": user.get("email", ""),
-                    "phone": profile.get("phone", ""),
-                    "role": profile.get("role", ""),
-                    "skills": profile.get("skills", []),
-                    "interests": profile.get("interests", []),
-                    "preferred_role": profile.get("preferred_role", ""),
-                    "experience": profile.get("experience", ""),
-                    "availability": profile.get("availability", ""),
-                    "location": profile.get("location", ""),
-                    "connection_status": "connected"
-                }
-                connected_profiles.append(profile_data)
-        
+        connected_profiles = get_connected_profiles(user_id)
         return {"connections": connected_profiles}
-        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch connections: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get connections")
 
-
-# Update the existing get_all_profiles endpoint to include connection status
-@app.get("/api/profiles/all")
-async def get_all_profiles(current_user=Depends(get_current_user)):
-    """Get all profiles with connection status"""
+@app.post("/api/conversations")
+async def create_conversation_api(request_data: dict, current_user=Depends(get_current_user)):
+    """Create conversation between connected users"""
     try:
         user_id = str(current_user["_id"])
+        target_user_id = request_data.get("target_user_id")
         
-        # Get user's connections
-        connected_user_ids = get_user_connections(user_id)
+        if not target_user_id:
+            raise HTTPException(status_code=400, detail="target_user_id required")
         
-        # Get all profiles except current user
-        query = {"user_id": {"$ne": ObjectId(user_id)}}
-        profiles_cursor = profiles_collection.find(query)
+        conversation_id = create_conversation(user_id, target_user_id)
+        target_user = get_user_by_id(target_user_id)
         
-        profiles = []
-        for profile in profiles_cursor:
-            # Get user details
-            user = users_collection.find_one({"_id": profile["user_id"]})
-            if user:
-                profile_id = str(profile["user_id"])
-                connection_status = "connected" if profile_id in connected_user_ids else "disconnected"
-                
-                profile_data = {
-                    "id": profile_id,
-                    "name": user.get("name", "Unknown"),
-                    "email": user.get("email", ""),
-                    "phone": profile.get("phone", ""),
-                    "role": profile.get("role", ""),
-                    "skills": profile.get("skills", []),
-                    "interests": profile.get("interests", []),
-                    "preferred_role": profile.get("preferred_role", ""),
-                    "experience": profile.get("experience", ""),
-                    "availability": profile.get("availability", ""),
-                    "location": profile.get("location", ""),
-                    "connection_status": connection_status
-                }
-                profiles.append(profile_data)
+        return {
+            "id": conversation_id,
+            "participant_ids": [user_id, target_user_id],
+            "participant_names": [
+                current_user.get("name", "Unknown"),
+                target_user.get("name", "Unknown") if target_user else "Unknown"
+            ]
+        }
         
-        return {"profiles": profiles}
-        
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch profiles: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create conversation")
 
-@app.post("/api/team-searches", response_model=TeamSearchResponse)
-async def create_team_search(
-    search_input: TeamSearchInput,
-    current_user=Depends(get_current_user)
+@app.post("/api/messages")
+async def send_message_api(message_data: MessageInput, current_user=Depends(get_current_user)):
+    """Send message"""
+    try:
+        user_id = str(current_user["_id"])
+        message = send_message(user_id, message_data.conversation_id, message_data.content)
+        return message
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to send message")
+
+@app.get("/api/messages/{conversation_id}")
+async def get_messages_api(
+    conversation_id: str, 
+    current_user=Depends(get_current_user), 
+    skip: int = 0, 
+    limit: int = 50
 ):
-    """Create a new team search and return matching profiles"""
+    """Get conversation messages"""
     try:
         user_id = str(current_user["_id"])
-        
-        # Convert search input to dict for processing
-        search_data = search_input.dict()
-        
-        # Find matching profiles
-        matching_profiles = find_matching_profiles(
-            search_data, 
-            user_id,  # exclude current user
-            limit=10
-        )
-        
-        # Save search to database
-        search_id = save_team_search(user_id, search_data)
-        
-        # Convert to response format
-        profile_responses = [
-            MatchedProfileResponse(**profile) 
-            for profile in matching_profiles
-        ]
-        
-        return TeamSearchResponse(
-            profiles=profile_responses,
-            search_id=search_id,
-            total_matches=len(profile_responses)
-        )
-        
+        messages = get_messages(user_id, conversation_id, skip, limit)
+        return {"messages": messages}
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-@app.get("/api/profiles/all")
-async def get_all_profiles(current_user=Depends(get_current_user)):
-    """Get all profiles (for your existing frontend logic)"""
-    try:
-        user_id = str(current_user["_id"])
-        
-        # Get all profiles except current user
-        query = {"user_id": {"$ne": ObjectId(user_id)}}
-        profiles_cursor = profiles_collection.find(query)
-        
-        profiles = []
-        for profile in profiles_cursor:
-            # Get user details
-            user = users_collection.find_one({"_id": profile["user_id"]})
-            if user:
-                profile_data = {
-                    "id": str(profile["user_id"]),
-                    "name": user.get("name", "Unknown"),
-                    "email": user.get("email", ""),
-                    "phone": profile.get("phone", ""),
-                    "role": profile.get("role", ""),
-                    "skills": profile.get("skills", []),
-                    "interests": profile.get("interests", []),
-                    "preferred_role": profile.get("preferred_role", ""),
-                    "experience": profile.get("experience", ""),
-                    "availability": profile.get("availability", ""),
-                    "location": profile.get("location", "")
-                }
-                profiles.append(profile_data)
-        
-        return {"profiles": profiles}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch profiles: {str(e)}")
-
-@app.get("/api/my-team-searches")
-async def get_my_team_searches(current_user=Depends(get_current_user)):
-    """Get user's previous team searches"""
-    try:
-        user_id = ObjectId(current_user["_id"])
-        
-        searches = list(team_searches_collection.find(
-            {"user_id": user_id}
-        ).sort("created_at", -1).limit(10))
-        
-        for search in searches:
-            search["id"] = str(search["_id"])
-            search["user_id"] = str(search["user_id"])
-            del search["_id"]
-        
-        return {"searches": searches}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch searches: {str(e)}")
-
+        raise HTTPException(status_code=500, detail="Failed to get messages")
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
