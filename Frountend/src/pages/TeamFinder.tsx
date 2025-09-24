@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Briefcase, Users, Star, Mail, AlertCircle, Bell, MessageCircle, ArrowLeft } from 'lucide-react';
+import { Search, MapPin, Briefcase, Users, Star, Mail, AlertCircle, Bell, MessageCircle, ArrowLeft, UserMinus } from 'lucide-react';
 import apiService from '../services/api';
 
 interface TeamRequirements {
@@ -177,6 +177,31 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
       }
     } catch (error: any) {
       setError(error.response?.data?.detail || 'Failed to start chat.');
+    }
+  };
+
+  const disconnectUser = async (targetUserId: string, targetUserName: string) => {
+    if (!window.confirm(`Are you sure you want to disconnect from ${targetUserName}? This will remove them from your connections and you won't be able to chat anymore.`)) {
+      return;
+    }
+
+    setProcessingRequests(prev => new Set(prev).add(targetUserId));
+    
+    try {
+      const response = await apiService.removeConnection(targetUserId);
+      
+      if (response.data) {
+        // Remove from connected profiles
+        setConnectedProfiles(prev => prev.filter(profile => profile.id !== targetUserId));
+      }
+    } catch (error: any) {
+      setError(error.response?.data?.detail || 'Failed to disconnect user.');
+    } finally {
+      setProcessingRequests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(targetUserId);
+        return newSet;
+      });
     }
   };
 
@@ -468,20 +493,42 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
                       )}
                     </div>
                     
-                    <div className="flex gap-2">
+                    <div className="space-y-2">
+                      {/* Main Action Buttons Row */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => startChat(profile.id, profile.name)}
+                          className="flex-1 bg-green-600 hover:bg-green-700 px-3 py-2 rounded text-xs flex items-center justify-center"
+                        >
+                          <MessageCircle className="w-3 h-3 mr-1" />
+                          Chat
+                        </button>
+                        <button
+                          onClick={() => window.open(`mailto:${profile.email}`)}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded text-xs flex items-center justify-center"
+                        >
+                          <Mail className="w-3 h-3 mr-1" />
+                          Email
+                        </button>
+                      </div>
+                      
+                      {/* Disconnect Button */}
                       <button
-                        onClick={() => startChat(profile.id, profile.name)}
-                        className="flex-1 bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-xs flex items-center justify-center"
+                        onClick={() => disconnectUser(profile.id, profile.name)}
+                        disabled={processingRequests.has(profile.id)}
+                        className="w-full bg-red-600/80 hover:bg-red-600 disabled:bg-red-400 disabled:cursor-not-allowed px-3 py-2 rounded text-xs flex items-center justify-center transition"
                       >
-                        <MessageCircle className="w-3 h-3 mr-1" />
-                        Chat
-                      </button>
-                      <button
-                        onClick={() => window.open(`mailto:${profile.email}`)}
-                        className="flex-1 bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs flex items-center justify-center"
-                      >
-                        <Mail className="w-3 h-3 mr-1" />
-                        Email
+                        {processingRequests.has(profile.id) ? (
+                          <>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                            Disconnecting...
+                          </>
+                        ) : (
+                          <>
+                            <UserMinus className="w-3 h-3 mr-1" />
+                            Disconnect
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>

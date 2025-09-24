@@ -20,7 +20,9 @@ import {
   Search,
   Sparkles,
   Compass,
-  LucideIcon
+
+  ChevronRight,
+  Trophy
 } from "lucide-react";
 
 interface FormData {
@@ -38,7 +40,7 @@ interface FloatingCardProps {
 }
 
 interface Rotating3DIconProps {
-  Icon: LucideIcon;
+  Icon: any;
   gradient: string;
   size?: string;
 }
@@ -46,6 +48,8 @@ interface Rotating3DIconProps {
 interface StartupGPSLogoProps {
   size?: string;
 }
+
+
 
 // 3D Floating Card Component (without rotation)
 const FloatingCard: React.FC<FloatingCardProps> = ({ children, delay = 0, className = "" }) => (
@@ -58,6 +62,8 @@ const FloatingCard: React.FC<FloatingCardProps> = ({ children, delay = 0, classN
     {children}
   </div>
 );
+
+
 
 // Animated Background Orbs
 const BackgroundOrbs = () => (
@@ -149,6 +155,9 @@ export default function HomePage() {
   const navigateToResearchAdvisor = () => navigate("/research-papers");
   const navigateToRoadmapGenerator = () => navigate("/roadmap");
   const navigateToTeamBuilder = () => navigate("/team");
+  const navigateToSuccess = () => navigate("/success");
+
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white overflow-hidden">
@@ -191,6 +200,16 @@ export default function HomePage() {
           100% { background-position: 200% 0; }
         }
         
+        @keyframes flowReveal {
+          from { opacity: 0; transform: translateY(30px) scale(0.95); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        
+        @keyframes successGlow {
+          0%, 100% { box-shadow: 0 0 20px rgba(255, 193, 7, 0.3); }
+          50% { box-shadow: 0 0 40px rgba(255, 193, 7, 0.6); }
+        }
+        
         .morphing-blob {
           animation: morphing 8s ease-in-out infinite, float 6s ease-in-out infinite;
         }
@@ -204,6 +223,10 @@ export default function HomePage() {
           background-size: 200% 100%;
           animation: shimmer 2s infinite;
         }
+        
+        .flow-reveal {
+          animation: flowReveal 0.6s ease-out forwards;
+        }
       `}</style>
 
       {/* Animated Background Elements */}
@@ -215,67 +238,244 @@ export default function HomePage() {
 
       <div className="relative z-10">
         {/* Hero Section with 3D Elements */}
-        {/* Hero Section with 3D Elements */}
-{/* Hero Section with 3D Elements */}
-<section className="text-center px-6 max-w-6xl mx-auto py-24 relative overflow-visible">
-  {/* 3D Morphing Blobs */}
-  <div className="absolute -top-32 -left-32 w-64 h-64 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 morphing-blob"></div>
-  <div
-    className="absolute -top-20 -right-20 w-48 h-48 bg-gradient-to-br from-purple-500/20 to-pink-500/20 morphing-blob"
-    style={{ animationDelay: '4s' }}
-  ></div>
+        <section className="text-center px-6 max-w-6xl mx-auto py-24 relative overflow-visible">
+          {/* 3D Morphing Blobs */}
+          <div className="absolute -top-32 -left-32 w-64 h-64 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 morphing-blob"></div>
+          <div
+            className="absolute -top-20 -right-20 w-48 h-48 bg-gradient-to-br from-purple-500/20 to-pink-500/20 morphing-blob"
+            style={{ animationDelay: '4s' }}
+          ></div>
 
-  <FloatingCard delay={0}>
-    <StartupGPSLogo size="w-24 h-24" />
-  </FloatingCard>
+          <FloatingCard delay={0}>
+            <StartupGPSLogo size="w-24 h-24" />
+          </FloatingCard>
 
-  <div style={{animation: 'slideInUp 1s ease-out 0.2s both'}}>
-  <h1
-    className="inline-block text-6xl md:text-8xl font-bold mb-6 
-               bg-gradient-to-r from-white via-blue-100 to-cyan-100 
-               bg-clip-text text-transparent leading-[2.4] 
-               overflow-visible pb-6"
-  >
-    Navigate Your Startup
-  </h1>
-</div>
+          <div style={{animation: 'slideInUp 1s ease-out 0.2s both'}}>
+            <h1
+              className="inline-block text-6xl md:text-8xl font-bold mb-6 
+                         bg-gradient-to-r from-white via-blue-100 to-cyan-100 
+                         bg-clip-text text-transparent leading-[2.4] 
+                         overflow-visible pb-6"
+            >
+              Navigate Your Startup
+            </h1>
+          </div>
 
-<div style={{animation: 'slideInUp 1s ease-out 0.4s both'}}>
-  <h1
-    className="inline-block text-6xl md:text-8xl font-bold mb-8 
-               bg-gradient-to-r from-cyan-100 via-blue-100 to-white 
-               bg-clip-text text-transparent leading-[2.4] 
-               overflow-visible pb-6"
-  >
-    Journey with AI
-  </h1>
-</div>
+          <div style={{animation: 'slideInUp 1s ease-out 0.4s both'}}>
+            <h1
+              className="inline-block text-6xl md:text-8xl font-bold mb-8 
+                         bg-gradient-to-r from-cyan-100 via-blue-100 to-white 
+                         bg-clip-text text-transparent leading-[2.4] 
+                         overflow-visible pb-6"
+            >
+              Journey with AI
+            </h1>
+          </div>
 
+          <div style={{ animation: 'slideInUp 1s ease-out 0.8s both' }}>
+            <button
+              onClick={navigateToIdeaValidator}
+              className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 
+                         text-white px-10 py-4 rounded-xl text-lg font-semibold transition-all duration-300 
+                         shadow-xl hover:shadow-2xl transform hover:-translate-y-2 hover:scale-105 
+                         inline-flex items-center group relative overflow-hidden"
+            >
+              <div className="absolute inset-0 shimmer opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <Target className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform duration-300 relative z-10" />
+              <span className="relative z-10">Get Started</span>
+              <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform duration-300 relative z-10" />
+            </button>
+          </div>
+        </section>
 
-  <div style={{ animation: 'slideInUp 1s ease-out 0.8s both' }}>
-    <button
-      onClick={navigateToIdeaValidator}
-      className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 
-                 text-white px-10 py-4 rounded-xl text-lg font-semibold transition-all duration-300 
-                 shadow-xl hover:shadow-2xl transform hover:-translate-y-2 hover:scale-105 
-                 inline-flex items-center group relative overflow-hidden"
-    >
-      <div className="absolute inset-0 shimmer opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-      <Target className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform duration-300 relative z-10" />
-      <span className="relative z-10">Get Started</span>
-      <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform duration-300 relative z-10" />
-    </button>
-  </div>
-</section>
+        {/* Journey Flow Diagram Section */}
+        <section className="px-6 max-w-7xl mx-auto py-20">
+          <div className="text-center mb-20">
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+              Your Journey to Success
+            </h2>
+            <p className="text-xl text-gray-300 max-w-4xl mx-auto leading-relaxed">
+              Follow our proven 5-step methodology to transform your startup idea into a thriving business
+            </p>
+          </div>
+
+          {/* Flow Diagram - Two Rows */}
+          <div className="relative max-w-6xl mx-auto">
+            {/* First Row - Steps 1-3 */}
+            <div className="flex justify-center items-center mb-20 relative">
+              {/* Step 1 - Idea Validation */}
+              <FloatingCard delay={0} className="relative">
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-20 h-20 mb-4 relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-2xl transform-gpu">
+                      <Lightbulb className="w-10 h-10 text-white" />
+                    </div>
+                    <div className="absolute -top-2 -left-2 w-8 h-8 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
+                      1
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Idea Validation</h3>
+                  <p className="text-gray-300 text-sm max-w-[200px]">Validate your startup idea with AI-powered market analysis</p>
+                </div>
+              </FloatingCard>
+
+              {/* Arrow 1 to 2 */}
+              <div className="flex items-center mx-8">
+                <div className="flex flex-col items-center">
+                  <div className="w-24 h-0.5 bg-gradient-to-r from-yellow-500 to-indigo-500 opacity-60 mb-1"></div>
+                  <div className="flex space-x-1">
+                    <div className="w-1 h-1 bg-indigo-500 rounded-full animate-pulse"></div>
+                    <div className="w-1 h-1 bg-indigo-500 rounded-full animate-pulse" style={{animationDelay: '0.5s'}}></div>
+                    <div className="w-1 h-1 bg-indigo-500 rounded-full animate-pulse" style={{animationDelay: '1s'}}></div>
+                  </div>
+                  <div className="mt-1">
+                    <ArrowRight className="w-5 h-5 text-indigo-400" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2 - Research Finder */}
+              <FloatingCard delay={0.2} className="relative">
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-20 h-20 mb-4 relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-2xl transform-gpu">
+                      <BookOpen className="w-10 h-10 text-white" />
+                    </div>
+                    <div className="absolute -top-2 -left-2 w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
+                      2
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Research Finder</h3>
+                  <p className="text-gray-300 text-sm max-w-[200px]">Access 50M+ research papers for data-driven decisions</p>
+                </div>
+              </FloatingCard>
+
+              {/* Arrow 2 to 3 */}
+              <div className="flex items-center mx-8">
+                <div className="flex flex-col items-center">
+                  <div className="w-24 h-0.5 bg-gradient-to-r from-indigo-500 to-green-500 opacity-60 mb-1"></div>
+                  <div className="flex space-x-1">
+                    <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
+                    <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse" style={{animationDelay: '0.5s'}}></div>
+                    <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse" style={{animationDelay: '1s'}}></div>
+                  </div>
+                  <div className="mt-1">
+                    <ArrowRight className="w-5 h-5 text-green-400" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 3 - Roadmap Generator */}
+              <FloatingCard delay={0.4} className="relative">
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-20 h-20 mb-4 relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-teal-500 rounded-2xl flex items-center justify-center shadow-2xl transform-gpu">
+                      <Map className="w-10 h-10 text-white" />
+                    </div>
+                    <div className="absolute -top-2 -left-2 w-8 h-8 bg-gradient-to-br from-green-500 to-teal-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
+                      3
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Roadmap Generator</h3>
+                  <p className="text-gray-300 text-sm max-w-[200px]">Get personalized roadmap with milestones and timelines</p>
+                </div>
+              </FloatingCard>
+            </div>
+
+            {/* Curved Arrow from Step 3 to Step 4 */}
+            <div className="flex justify-center mb-8">
+              <div className="relative">
+                <svg width="300" height="60" viewBox="0 0 300 60" className="opacity-60">
+                  <defs>
+                    <linearGradient id="curveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#10b981" />
+                      <stop offset="100%" stopColor="#3b82f6" />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    d="M 50 10 Q 150 50 250 10"
+                    stroke="url(#curveGradient)"
+                    strokeWidth="2"
+                    fill="none"
+                    strokeDasharray="5,5"
+                    className="animate-pulse"
+                  />
+                  <polygon points="245,8 255,10 245,12" fill="#3b82f6" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Second Row - Steps 4-5 */}
+            <div className="flex justify-center items-center relative">
+              {/* Step 4 - Team Builder */}
+              <FloatingCard delay={0.6} className="relative">
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-20 h-20 mb-4 relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-2xl transform-gpu">
+                      <Users className="w-10 h-10 text-white" />
+                    </div>
+                    <div className="absolute -top-2 -left-2 w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
+                      4
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Team Builder</h3>
+                  <p className="text-gray-300 text-sm max-w-[200px]">Find perfect team members for your startup vision</p>
+                </div>
+              </FloatingCard>
+
+              {/* Final Arrow 4 to 5 */}
+              <div className="flex items-center mx-12">
+                <div className="flex flex-col items-center">
+                  <div className="w-32 h-0.5 bg-gradient-to-r from-blue-500 to-yellow-400 opacity-60 mb-1"></div>
+                  <div className="flex space-x-1">
+                    <div className="w-1 h-1 bg-yellow-400 rounded-full animate-pulse"></div>
+                    <div className="w-1 h-1 bg-yellow-400 rounded-full animate-pulse" style={{animationDelay: '0.5s'}}></div>
+                    <div className="w-1 h-1 bg-yellow-400 rounded-full animate-pulse" style={{animationDelay: '1s'}}></div>
+                  </div>
+                  <div className="mt-1">
+                    <ArrowRight className="w-5 h-5 text-yellow-400" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 5 - Success */}
+              <FloatingCard delay={0.8} className="relative">
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-20 h-20 mb-4 relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-yellow-400 to-orange-400 rounded-2xl flex items-center justify-center shadow-2xl transform-gpu animate-pulse">
+                      <Trophy className="w-10 h-10 text-white" />
+                    </div>
+                    <div className="absolute -top-2 -left-2 w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-400 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
+                      5
+                    </div>
+                    {/* Success celebration particles */}
+                    <div className="absolute -top-4 -right-4 w-3 h-3 bg-yellow-400 rounded-full animate-ping"></div>
+                    <div className="absolute -bottom-2 -left-4 w-2 h-2 bg-orange-400 rounded-full animate-ping" style={{animationDelay: '0.5s'}}></div>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Success</h3>
+                  <p className="text-gray-300 text-sm max-w-[200px]">Launch your startup with confidence and achieve growth</p>
+                </div>
+              </FloatingCard>
+            </div>
+          </div>
+
+          {/* Call to Action */}
+          <div className="text-center mt-16">
+            <FloatingCard delay={1}>
+              <div className="inline-flex items-center bg-gradient-to-r from-blue-600/20 to-cyan-600/20 backdrop-blur-sm px-6 py-3 rounded-full border border-blue-500/30">
+                <Sparkles className="w-5 h-5 text-blue-400 mr-2" />
+                <span className="text-blue-200 text-sm font-medium">Start your journey today and join thousands of successful founders</span>
+              </div>
+            </FloatingCard>
+          </div>
+        </section>
 
         {/* Core Features Section */}
         <section className="px-6 max-w-7xl mx-auto py-20">
           <div className="text-center mb-16">
-
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 mt-8">
               Core Features
             </h2>
-
             <p className="text-xl text-gray-300 max-w-4xl mx-auto leading-relaxed">
               Four powerful AI-driven tools to transform your startup journey
               from idea to execution
@@ -386,11 +586,9 @@ export default function HomePage() {
         {/* Why Choose Section */}
         <section className="px-6 max-w-7xl mx-auto py-20">
           <div className="text-center mb-16">
-
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 mt-8">
               Why Choose Startup GPS?
             </h2>
-
             <p className="text-xl text-gray-300 max-w-4xl mx-auto leading-relaxed">
               Our AI-powered platform combines cutting-edge technology with
               proven startup methodologies to give you the competitive edge you

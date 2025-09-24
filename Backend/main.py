@@ -19,6 +19,8 @@ from bson import ObjectId
 from dotenv import load_dotenv
 from datetime import datetime
 import uuid
+import requests
+
 from database import (
     users_collection, ideas_collection, profiles_collection, roadmaps_collection, 
     research_collection, db, hash_password, verify_password, create_access_token,
@@ -34,7 +36,7 @@ from database import (
     get_connected_profiles_fixed as get_connected_profiles, 
     create_conversation_fixed as create_conversation, 
     send_message_fixed as send_message, 
-    get_messages_fixed as get_messages
+    get_messages_fixed as get_messages,disconnect_users  
 )
 from enhanced_chatbot import StartupGPSChatbotEnhanced, integrate_enhanced_chatbot_with_main
 from typing import List, Optional, Dict, Any
@@ -297,7 +299,153 @@ def create_access_token_helper(subject: str, role: str = "user"):
 # ==========================================
 # ENHANCED IDEA VALIDATION FUNCTIONALITY
 # ==========================================
+# Content filtering for harmful keywords
+HARMFUL_KEYWORDS = [
+    # Violence and weapons
+    'weapon', 'bomb', 'explosive', 'gun', 'knife', 'violence', 'kill', 'murder', 'assault',
+    'terrorism', 'terrorist', 'attack', 'harm', 'hurt', 'damage', 'destroy',
+    
+    # Illegal substances
+    'drug dealer', 'cocaine', 'heroin', 'meth', 'illegal drugs', 'drug trafficking',
+    'drug cartel', 'smuggling', 'black market',
+    
+    # Fraud and scams
+    'ponzi scheme', 'pyramid scheme', 'scam', 'fraud', 'fake', 'counterfeit',
+    'money laundering', 'tax evasion', 'identity theft',
+    
+    # Adult content
+    'pornography', 'adult content', 'sex work', 'escort service', 'strip club',
+    
+    # Gambling (in restricted contexts)
+    'illegal gambling', 'underground casino', 'betting scam',
+    
+    # Hate speech
+    'hate speech', 'discrimination', 'racism', 'extremist', 'supremacy'
+]
 
+def is_harmful_content(text: str) -> bool:
+    """Check if the text contains harmful keywords or content"""
+    text_lower = text.lower()
+    
+    # Check for direct harmful keywords
+    for keyword in HARMFUL_KEYWORDS:
+        if keyword in text_lower:
+            return True
+    
+    # Additional pattern checks for suspicious content
+    suspicious_patterns = [
+        r'\b(how to (make|build|create) (bomb|explosive|weapon))\b',
+        r'\b(sell (drugs|weapons|stolen))\b',
+        r'\b(hack (into|system|account))\b',
+        r'\b(steal (money|identity|data))\b',
+        r'\b(illegal (business|activity|service))\b'
+    ]
+    
+    for pattern in suspicious_patterns:
+        if re.search(pattern, text_lower):
+            return True
+    
+    return False
+
+def calculate_accurate_overall_score(scores: Dict[str, int]) -> int:
+    """Calculate more accurate overall score with proper weighting"""
+    weights = {
+        'feasibility': 0.25,      # 25% - Can it be built?
+        'market_demand': 0.30,    # 30% - Is there demand? (most important)
+        'uniqueness': 0.20,       # 20% - How unique is it?
+        'strength': 0.15,         # 15% - Core advantages
+        'risk_factors': 0.10      # 10% - Risk assessment (inverted)
+    }
+    
+    # Calculate weighted average
+    weighted_sum = 0
+    for dimension, weight in weights.items():
+        score = scores.get(dimension, 70)
+        # For risk_factors, invert the score (lower risk = higher contribution)
+        if dimension == 'risk_factors':
+            # Convert risk score to contribution score
+            contribution_score = max(0, 100 - score + 50)  # Invert and normalize
+            weighted_sum += contribution_score * weight
+        else:
+            weighted_sum += score * weight
+    
+    # Ensure score is within valid range
+    overall_score = max(0, min(100, int(weighted_sum)))
+    
+    # Apply additional logic for extreme cases
+    if any(scores.get(key, 70) < 30 for key in ['feasibility', 'market_demand']):
+        overall_score = min(overall_score, 45)  # Cap at 45 if critical areas are very weak
+    
+    if all(scores.get(key, 70) >= 85 for key in weights.keys()):
+        overall_score = max(overall_score, 85)  # Boost if all areas are excellent
+    
+    return overall_score
+
+def call_groq_chat_with_idea(message: str, idea_context: str, session_id: str) -> str:
+    """Enhanced chat function for idea-specific conversations"""
+    
+    if not GROQ_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="GROQ API not configured"
+        )
+    
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    system_prompt = f"""You are an expert AI startup advisor specifically helping with this startup idea:
+
+STARTUP IDEA: {idea_context}
+
+Your role:
+1. Provide specific, actionable advice related to this exact startup idea
+2. Answer questions about market opportunities, competition, implementation, funding, etc.
+3. Give concrete examples and strategies tailored to this specific idea
+4. Suggest specific tools, platforms, partnerships relevant to this startup
+5. Provide realistic timelines and resource estimates
+6. Keep responses focused and practical
+
+Guidelines:
+- Always relate advice back to the specific startup idea
+- Provide concrete next steps and actionable recommendations
+- Include specific examples, tools, or resources when possible
+- Be honest about challenges while remaining constructive
+- Ask clarifying questions when needed to provide better advice
+
+Keep responses conversational but informative, around 2-4 paragraphs maximum.
+"""
+
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 1000
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail="Chat service temporarily unavailable"
+            )
+        
+        data = response.json()
+        return data["choices"][0]["message"]["content"].strip()
+        
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Chat service encountered an error"
+        )
 def enhance_competitor_analysis(result: dict) -> dict:
     """Enhanced competitor analysis with structured parsing"""
     competitors_text = result.get("analysis", {}).get("existing_competitors", "")
@@ -573,18 +721,28 @@ def parse_fallback_response(text: str) -> dict:
     
     return enhance_competitor_analysis(result)
 
-def call_groq_validation(prompt: str) -> dict:
-    """Enhanced validation function with comprehensive error handling"""
+# REPLACE your existing call_groq_validation function with this enhanced version:
+def call_groq_validation_enhanced(prompt: str) -> dict:
+    """Enhanced validation function with content filtering and accurate scoring"""
+    
+    # Check for harmful content
+    if is_harmful_content(prompt):
+        raise HTTPException(
+            status_code=400,
+            detail="Please enter a valid and appropriate startup idea. The content provided contains inappropriate elements."
+        )
+    
+    # Validate minimum quality
+    if len(prompt.strip()) < 30:
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide a more detailed description (at least 30 characters) for accurate validation."
+        )
+    
     if not GROQ_API_KEY:
         raise HTTPException(
             status_code=500, 
-            detail="GROQ_API_KEY environment variable is not set. Please configure your API key."
-        )
-
-    if not GROQ_API_KEY.startswith('gsk_'):
-        raise HTTPException(
-            status_code=500,
-            detail="Invalid GROQ API key format. Key should start with 'gsk_'"
+            detail="GROQ_API_KEY environment variable is not set."
         )
 
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -593,6 +751,7 @@ def call_groq_validation(prompt: str) -> dict:
         "Content-Type": "application/json"
     }
 
+    # Use your existing system_prompt from call_groq_validation
     system_prompt = """You are an AI Startup Validator for "Startup GPS". 
 Your role is to provide dynamic, detailed, and actionable startup validation reports based on the user's idea. 
 Do not use any static or placeholder data. Always analyze the user's input deeply.
@@ -674,7 +833,7 @@ This format is critical for the frontend to create clickable company bubbles. In
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
-        "temperature": 0.3,
+        "temperature": 0.2,  # Lower temperature for more consistent scoring
         "max_tokens": 4000
     }
 
@@ -682,44 +841,16 @@ This format is critical for the frontend to create clickable company bubbles. In
         logger.info("Sending request to GROQ API...")
         response = requests.post(url, headers=headers, json=payload, timeout=60)
         
-        if response.status_code == 401:
-            logger.error("Authentication failed - Invalid API key")
-            raise HTTPException(
-                status_code=401, 
-                detail="Authentication failed. Please check your GROQ API key is valid and active."
-            )
-        elif response.status_code == 429:
-            logger.error("Rate limit exceeded")
-            raise HTTPException(
-                status_code=429, 
-                detail="Rate limit exceeded. Please wait before making another request."
-            )
-        elif response.status_code == 400:
-            logger.error(f"Bad request: {response.text}")
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Bad request to GROQ API: {response.text}"
-            )
-        elif response.status_code != 200:
-            logger.error(f"API Error {response.status_code}: {response.text}")
+        if response.status_code != 200:
             raise HTTPException(
                 status_code=response.status_code, 
-                detail=f"GROQ API error {response.status_code}: {response.text}"
+                detail=f"GROQ API error: {response.text}"
             )
 
         data = response.json()
+        ai_text = data["choices"][0]["message"]["content"].strip()
         
-        if "choices" not in data or not data["choices"]:
-            raise HTTPException(
-                status_code=500,
-                detail="Invalid response structure from GROQ API"
-            )
-        
-        ai_text = data["choices"][0]["message"]["content"]
-        logger.info(f"Received response from GROQ API ({len(ai_text)} characters)")
-        
-        # Clean up the response to ensure it's valid JSON
-        ai_text = ai_text.strip()
+        # Clean JSON response
         if ai_text.startswith("```json"):
             ai_text = ai_text[7:]
         if ai_text.endswith("```"):
@@ -729,47 +860,133 @@ This format is critical for the frontend to create clickable company bubbles. In
         # Parse JSON response
         try:
             result = json.loads(ai_text)
-            logger.info("Successfully parsed JSON response")
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON parsing failed: {e}")
-            logger.info("Using fallback parsing")
-            result = parse_fallback_response(ai_text)
+        except json.JSONDecodeError:
+            result = parse_fallback_response(ai_text)  # Use your existing function
         
-        # Validate and enhance result structure
+        # Calculate accurate overall score
+        overall_score = calculate_accurate_overall_score(result.get("scores", {}))
+        result["overall_score"] = overall_score
+        
+        # Validate and enhance result structure (use your existing functions)
         if not validate_response_structure(result):
-            logger.info("Response structure invalid, applying fixes")
             result = fix_response_structure(result)
         
-        # Enhance competitor analysis
+        # Enhance competitor analysis (use your existing function)
         result = enhance_competitor_analysis(result)
         
         return result
         
-    except requests.exceptions.Timeout:
-        logger.error("Request timeout")
-        raise HTTPException(
-            status_code=504, 
-            detail="Request timeout. GROQ API took too long to respond."
-        )
-    except requests.exceptions.ConnectionError:
-        logger.error("Connection error")
-        raise HTTPException(
-            status_code=503, 
-            detail="Connection error. Unable to reach GROQ API."
-        )
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Request exception: {e}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"API request failed: {str(e)}"
-        )
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+        logger.error(f"Validation error: {e}")
         raise HTTPException(
             status_code=500, 
             detail=f"Validation processing failed: {str(e)}"
+        )
+
+# ADD THESE NEW API ENDPOINTS:
+
+@app.post("/validate-idea-enhanced")
+async def validate_idea_enhanced(idea: IdeaInput, current_user=Depends(get_optional_current_user)):
+    """Enhanced idea validation with content filtering and accurate scoring"""
+    logger.info(f"Enhanced validation request: {idea.prompt[:50]}...")
+    
+    try:
+        # Get AI validation with enhanced features
+        ai_result = call_groq_validation_enhanced(idea.prompt)
+        logger.info("Enhanced AI validation completed")
+        
+        # Structure the response (same as your existing code)
+        validation_response = ValidationResponse(
+            prompt=idea.prompt,
+            validation=ValidationDetails(
+                verdict=ai_result["analysis"]["verdict"],
+                feasibility=ai_result["analysis"]["feasibility"],
+                marketDemand=ai_result["analysis"]["market_demand"],
+                uniqueness=ai_result["analysis"]["uniqueness"],
+                strength=ai_result["analysis"]["strength"],
+                riskFactors=ai_result["analysis"]["risk_factors"],
+                riskMitigation=ai_result["analysis"].get("risk_mitigation", "Strategic risk mitigation recommended."),
+                existingCompetitors=ai_result["analysis"]["existing_competitors"],
+                competitors=[
+                    CompetitorInfo(name=comp["name"], url=comp["url"]) 
+                    for comp in ai_result["analysis"].get("competitors", [])
+                ]
+            ),
+            scores=ValidationScores(
+                overall=ai_result["overall_score"],
+                feasibility=ai_result["scores"]["feasibility"],
+                marketDemand=ai_result["scores"]["market_demand"],
+                uniqueness=ai_result["scores"]["uniqueness"],
+                strength=ai_result["scores"]["strength"],
+                riskFactors=ai_result["scores"]["risk_factors"]
+            ),
+            suggestions=Suggestions(
+                critical=ai_result["suggestions"]["critical"],
+                recommended=ai_result["suggestions"]["recommended"],
+                optional=ai_result["suggestions"]["optional"]
+            ),
+            created_at=datetime.utcnow()
+        )
+        
+        # Save to database if user is authenticated (your existing logic)
+        if current_user:
+            try:
+                user_id = str(current_user["_id"])
+                idea_data = {
+                    "prompt": idea.prompt,
+                    "validation": validation_response.validation.dict(),
+                    "scores": validation_response.scores.dict(),
+                    "suggestions": validation_response.suggestions.dict()
+                }
+                saved_id = save_idea_validation(user_id, idea_data)
+                logger.info(f"Enhanced idea saved with ID: {saved_id}")
+            except Exception as e:
+                logger.error(f"Database save error: {e}")
+        
+        return validation_response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Enhanced validation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
+
+@app.post("/chat-with-idea")
+async def chat_with_idea(
+    chat_data: dict,
+    current_user=Depends(get_optional_current_user)
+):
+    """Chat about specific startup idea with contextual AI responses"""
+    try:
+        message = chat_data.get("message", "").strip()
+        idea_context = chat_data.get("idea_context", "").strip()
+        session_id = chat_data.get("session_id", "")
+        
+        if not message:
+            raise HTTPException(status_code=400, detail="Message is required")
+        
+        if not idea_context:
+            raise HTTPException(status_code=400, detail="Idea context is required")
+        
+        if len(message) > 1000:
+            raise HTTPException(status_code=400, detail="Message too long (max 1000 characters)")
+        
+        # Get AI response
+        ai_response = call_groq_chat_with_idea(message, idea_context, session_id)
+        
+        return {
+            "response": ai_response,
+            "session_id": session_id,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Chat service temporarily unavailable"
         )
 
 # ==========================================
@@ -1402,15 +1619,15 @@ async def get_profile(current_user=Depends(get_current_user)):
     return profile
 
 # Enhanced Idea Validation Endpoint
-@app.post("/validate-idea", response_model=ValidationResponse)
-async def validate_idea(idea: IdeaInput, current_user=Depends(get_optional_current_user)):
-    """Enhanced idea validation with optional authentication for database storage"""
-    logger.info(f"Validation request received: {idea.prompt[:50]}...")
+@app.post("/validate-idea-enhanced")
+async def validate_idea_enhanced(idea: IdeaInput, current_user=Depends(get_optional_current_user)):
+    """Enhanced idea validation with content filtering and accurate scoring"""
+    logger.info(f"Enhanced validation request: {idea.prompt[:50]}...")
     
     try:
-        # Get AI validation
-        ai_result = call_groq_validation(idea.prompt)
-        logger.info("AI validation completed")
+        # Get AI validation with enhanced features
+        ai_result = call_groq_validation_enhanced(idea.prompt)
+        logger.info("Enhanced AI validation completed")
         
         # Structure the response
         validation_response = ValidationResponse(
@@ -1422,7 +1639,7 @@ async def validate_idea(idea: IdeaInput, current_user=Depends(get_optional_curre
                 uniqueness=ai_result["analysis"]["uniqueness"],
                 strength=ai_result["analysis"]["strength"],
                 riskFactors=ai_result["analysis"]["risk_factors"],
-                riskMitigation=ai_result["analysis"].get("risk_mitigation", "Strategic risk mitigation approaches recommended."),
+                riskMitigation=ai_result["analysis"].get("risk_mitigation", "Strategic risk mitigation recommended."),
                 existingCompetitors=ai_result["analysis"]["existing_competitors"],
                 competitors=[
                     CompetitorInfo(name=comp["name"], url=comp["url"]) 
@@ -1449,32 +1666,70 @@ async def validate_idea(idea: IdeaInput, current_user=Depends(get_optional_curre
         if current_user:
             try:
                 user_id = str(current_user["_id"])
-                logger.info(f"Saving idea validation for user: {current_user.get('email')}")
-                
-                # Prepare data for database
                 idea_data = {
                     "prompt": idea.prompt,
                     "validation": validation_response.validation.dict(),
                     "scores": validation_response.scores.dict(),
                     "suggestions": validation_response.suggestions.dict()
                 }
-                
-                # Save to database
                 saved_id = save_idea_validation(user_id, idea_data)
-                logger.info(f"Idea saved with ID: {saved_id}")
-                
+                logger.info(f"Enhanced idea saved with ID: {saved_id}")
             except Exception as e:
                 logger.error(f"Database save error: {e}")
-                # Continue anyway - validation still works without saving
-        else:
-            logger.info("No authenticated user - not saving to database")
         
         return validation_response
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Validation failed: {e}")
+        logger.error(f"Enhanced validation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
 
+@app.post("/chat-with-idea")
+async def chat_with_idea(
+    chat_data: dict,
+    current_user=Depends(get_optional_current_user)
+):
+    """Chat about specific startup idea with contextual AI responses"""
+    try:
+        message = chat_data.get("message", "").strip()
+        idea_context = chat_data.get("idea_context", "").strip()
+        session_id = chat_data.get("session_id", "")
+        
+        if not message:
+            raise HTTPException(status_code=400, detail="Message is required")
+        
+        if not idea_context:
+            raise HTTPException(status_code=400, detail="Idea context is required")
+        
+        if len(message) > 1000:
+            raise HTTPException(status_code=400, detail="Message too long (max 1000 characters)")
+        
+        # Get AI response
+        ai_response = call_groq_chat_with_idea(message, idea_context, session_id)
+        
+        # Optional: Save chat history if user is authenticated
+        if current_user:
+            try:
+                # You can implement chat history saving here if needed
+                pass
+            except Exception as e:
+                logger.warning(f"Failed to save chat history: {e}")
+        
+        return {
+            "response": ai_response,
+            "session_id": session_id,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Chat service temporarily unavailable"
+        )
 # Enhanced Roadmap Generation Endpoint
 @app.post("/generate-roadmap", response_model=RoadmapResponse)
 async def generate_roadmap(roadmap_input: RoadmapInput, current_user=Depends(get_optional_current_user)):
@@ -2601,6 +2856,29 @@ async def get_messages_api(
         raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to get messages")
+    
+@app.delete("/api/connections/{target_user_id}")
+async def disconnect_user(target_user_id: str, current_user=Depends(get_current_user)):
+    """Disconnect from a connected user"""
+    try:
+        user_id = str(current_user["_id"])
+        
+        # Check if users are actually connected
+        if get_connection_status(user_id, target_user_id) != "connected":
+            raise HTTPException(status_code=400, detail="Users are not connected")
+        
+        success = disconnect_users(user_id, target_user_id)
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to disconnect")
+        
+        return {"message": "Successfully disconnected"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Disconnect failed")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

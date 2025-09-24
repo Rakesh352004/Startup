@@ -1181,6 +1181,27 @@ def get_messages_fixed(user_id: str, conversation_id: str, skip: int = 0, limit:
     except Exception as e:
         logging.error(f"Error getting messages: {e}")
         return []
+    
+def disconnect_users(user_id: str, target_user_id: str) -> bool:
+    """Remove connection between two users (mutual disconnect)"""
+    try:
+        # Remove connection from both directions
+        connections_collection.delete_one({
+            "user_id": ObjectId(user_id),
+            "target_user_id": ObjectId(target_user_id)
+        })
+        
+        connections_collection.delete_one({
+            "user_id": ObjectId(target_user_id),
+            "target_user_id": ObjectId(user_id)
+        })
+        
+        logging.info(f"Disconnected users {user_id} and {target_user_id}")
+        return True
+        
+    except Exception as e:
+        logging.error(f"Error disconnecting users: {e}")
+        return False
 # =====================
 # UTILITY FUNCTIONS
 # =====================
