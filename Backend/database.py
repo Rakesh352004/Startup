@@ -37,7 +37,9 @@ connections_collection = db["connections"]
 messages_collection = db["messages"]
 conversations_collection = db["conversations"]
 connection_requests_collection = db["connection_requests"]
-
+support_tickets_collection = db["support_tickets"]
+admin_users_collection = db["admin_users"]
+ticket_responses_collection = db["ticket_responses"]
 # Create indexes for better performance
 try:
     users_collection.create_index("email", unique=True)
@@ -56,6 +58,10 @@ try:
     connection_requests_collection.create_index("created_at")
     connections_collection.create_index([("user_id", 1), ("target_user_id", 1)])
     connections_collection.create_index("status")
+    connections_collection.create_index([("user_id", 1), ("created_at", -1)])
+    connections_collection.create_index([("status", 1)])
+    connections_collection.create_index([("ticket_id", 1)], unique=True)
+
 except Exception as e:
     print(f"Index creation error: {e}")
 

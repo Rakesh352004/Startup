@@ -1,259 +1,323 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  MessageCircle, 
-  Send, 
-  Bot, 
-  User, 
-  Sparkles, 
-  RefreshCw, 
-  Trash2, 
-  Settings,
-  Lightbulb,
-  TrendingUp,
-  Users,
-  DollarSign,
-  MapPin,
-  Brain,
-  Target,
-  Search,
-  FileText,
-  Rocket,
-  Award,
-  Zap,
-  Shield,
-  Clock,
-  Star,
-  MessageSquare,
-  Mic,
-  MicOff,
-  Copy,
-  ThumbsUp,
-  ThumbsDown,
-  MoreVertical,
-  ChevronRight,
-  Activity,
-  PlusCircle,
-  CheckCircle,
-  AlertCircle,
-  Minimize2,
-  Maximize2,
-  Volume2,
-  VolumeX
+  MessageCircle, Send, Bot, User, Lightbulb, FileText, MapPin, Users,
+  Clock, Trash2, X, Sparkles, Mail, Loader2, CheckCircle2, AlertCircle, ExternalLink
 } from 'lucide-react';
 
-// Enhanced Types
+const API_BASE_URL = "http://localhost:8000";
+
 interface Message {
   id: string;
   text: string;
   sender: 'user' | 'bot';
-  timestamp: string;
-  intent?: string;
-  entities?: any;
+  timestamp: Date;
+  data?: any;
   followUps?: string[];
-  confidence?: number;
-  isTyping?: boolean;
+  isAction?: boolean;
+  actionStatus?: 'processing' | 'complete' | 'error';
 }
 
-interface ChatSession {
-  session_id: string;
-  messages: Message[];
-  created_at: string;
-  last_activity: string;
+interface WelcomeData {
+  user: {
+    name: string;
+    email?: string;
+    authenticated: boolean;
+  };
+  stats: {
+    ideas: number;
+    roadmaps: number;
+    research: number;
+  };
+  features: Array<{
+    id: string;
+    name: string;
+    icon: string;
+  }>;
 }
 
-interface SuggestedAction {
-  text: string;
-  icon: React.ReactNode;
-  category: string;
-  description: string;
-  gradient: string;
-}
+const adminContacts = [
+  { name: "Rakesh V", email: "rakeshyadav352004@gmail.com", role: "Lead Developer" },
+  { name: "Padmashree MM", email: "padmashree1384@gmail.com", role: "Backend Engineer" },
+  { name: "Peddinti Mohammad", email: "mohammadaslam62819@gmail.com", role: "Frontend Developer" },
+  { name: "Rakshitha S", email: "rakshitha2735@gmail.com", role: "UI/UX Designer" }
+];
 
-const Help = () => {
+const ContactAdminModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className="bg-[#1e293b] rounded-xl border border-gray-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="sticky top-0 bg-[#1e293b] border-b border-gray-700 p-5 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center">
+              <Mail className="w-5 h-5 mr-2 text-indigo-400" />
+              Contact Admin Team
+            </h2>
+            <p className="text-gray-400 text-sm mt-1">Reach out for support and assistance</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-9 h-9 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-all flex items-center justify-center"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-3">
+          {adminContacts.map((admin, index) => (
+            <div
+              key={index}
+              className="p-4 rounded-lg bg-[#0f172a] border border-gray-700 hover:border-indigo-500/50 transition-all"
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1">
+                  <h3 className="text-base font-semibold text-white">{admin.name}</h3>
+                  <p className="text-sm text-indigo-400">{admin.role}</p>
+                </div>
+                <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 text-lg font-bold">
+                  {admin.name.charAt(0)}
+                </div>
+              </div>
+              
+              <a
+                href={`mailto:${admin.email}`}
+                className="flex items-center text-gray-300 hover:text-indigo-400 transition-colors text-sm group"
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                <span className="group-hover:underline">{admin.email}</span>
+                <ExternalLink className="w-3 h-3 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </a>
+            </div>
+          ))}
+        </div>
+
+        <div className="p-5 border-t border-gray-700 bg-[#0f172a]">
+          <p className="text-sm text-gray-400 text-center">
+            Our team typically responds within 24 hours
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ValidationDisplay = ({ data }: any) => {
+  const result = data.result;
+  const scores = result.scores;
+  
+  return (
+    <div className="mt-3 bg-[#0f172a] rounded-lg p-4 border border-indigo-500/30">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm text-gray-400">Overall Score</span>
+        <div className="flex items-center space-x-2">
+          <div className="text-3xl font-bold text-indigo-400">{result.overall_score}</div>
+          <div className="text-gray-500">/100</div>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-2 gap-3">
+        {Object.entries(scores).filter(([key]) => key !== 'overall').map(([key, value]: any) => (
+          <div key={key} className="space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-400 capitalize">{key.replace('_', ' ')}</span>
+              <span className="text-indigo-300">{value}%</span>
+            </div>
+            <div className="h-1.5 bg-[#1e293b] rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${value}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const RoadmapDisplay = ({ data }: any) => {
+  const phases = data.result.phases || [];
+  
+  return (
+    <div className="mt-3 bg-[#0f172a] rounded-lg p-4 border border-indigo-500/30">
+      <div className="flex items-center space-x-2 mb-3">
+        <MapPin className="w-4 h-4 text-indigo-400" />
+        <span className="text-sm font-semibold text-indigo-300">{phases.length} Phase Roadmap</span>
+      </div>
+      <div className="space-y-2">
+        {phases.slice(0, 3).map((phase: any, idx: number) => (
+          <div key={idx} className="flex items-start space-x-2 p-2 bg-[#1e293b] rounded">
+            <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-xs text-indigo-400 font-bold flex-shrink-0">
+              {idx + 1}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-white truncate">{phase.title}</div>
+              <div className="text-xs text-gray-400">{phase.timeframe}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {phases.length > 3 && (
+        <div className="mt-2 text-xs text-center text-gray-500">
+          +{phases.length - 3} more phases
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ResearchDisplay = ({ data }: any) => {
+  const papers = data.result.papers || [];
+  
+  return (
+    <div className="mt-3 bg-[#0f172a] rounded-lg p-4 border border-indigo-500/30">
+      <div className="flex items-center space-x-2 mb-3">
+        <FileText className="w-4 h-4 text-green-400" />
+        <span className="text-sm font-semibold text-green-300">{papers.length} Research Papers</span>
+      </div>
+      <div className="space-y-2">
+        {papers.slice(0, 3).map((paper: any, idx: number) => (
+          <a
+            key={idx}
+            href={paper.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block p-2 bg-[#1e293b] rounded hover:bg-[#334155] transition-colors"
+          >
+            <div className="text-sm font-medium text-white line-clamp-1">{paper.title}</div>
+            <div className="text-xs text-gray-400 mt-0.5">
+              {paper.authors.slice(0, 2).join(", ")} • {paper.source}
+            </div>
+          </a>
+        ))}
+      </div>
+      {papers.length > 3 && (
+        <div className="mt-2 text-xs text-center text-gray-500">
+          +{papers.length - 3} more papers
+        </div>
+      )}
+    </div>
+  );
+};
+
+const StartupGPSChatbot = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string>('');
-  const [showSuggestions, setShowSuggestions] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
-  const [error, setError] = useState<string>('');
-  const [isListening, setIsListening] = useState(false);
-  const [currentCategory, setCurrentCategory] = useState('all');
-  const [chatStats, setChatStats] = useState({ 
-    interactions: 0, 
-    sessions: 1, 
-    avgResponse: '1.2s',
-    confidence: 95 
-  });
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [welcomeData, setWelcomeData] = useState<WelcomeData | null>(null);
+  const [sessionId] = useState(Date.now().toString());
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [showContactModal, setShowContactModal] = useState(false);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Enhanced suggestions with gradients and better categorization
-  const suggestedActions: SuggestedAction[] = [
-    { 
-      text: "What is Startup GPS and how does it help founders?", 
-      icon: <Lightbulb className="w-4 h-4" />, 
-      category: "getting-started",
-      description: "Learn about our AI-powered entrepreneurial platform",
-      gradient: "from-yellow-400 to-orange-500"
-    },
-    { 
-      text: "Validate my startup idea with AI analysis", 
-      icon: <TrendingUp className="w-4 h-4" />, 
-      category: "validation",
-      description: "Get comprehensive AI-powered idea validation",
-      gradient: "from-blue-400 to-cyan-500"
-    },
-    { 
-      text: "Connect me with experienced mentors", 
-      icon: <Users className="w-4 h-4" />, 
-      category: "mentorship",
-      description: "Access our network of 500+ verified mentors",
-      gradient: "from-green-400 to-emerald-500"
-    },
-    { 
-      text: "Find funding opportunities and investors", 
-      icon: <DollarSign className="w-4 h-4" />, 
-      category: "funding",
-      description: "Connect with 5000+ active investors",
-      gradient: "from-purple-400 to-pink-500"
-    },
-    { 
-      text: "Generate a strategic roadmap for my startup", 
-      icon: <MapPin className="w-4 h-4" />, 
-      category: "roadmap",
-      description: "Create phase-by-phase execution plans",
-      gradient: "from-indigo-400 to-blue-500"
-    },
-    { 
-      text: "Access research papers for my industry", 
-      icon: <FileText className="w-4 h-4" />, 
-      category: "research",
-      description: "Search through 10M+ academic papers",
-      gradient: "from-teal-400 to-cyan-500"
-    }
-  ];
-
-  const categories = [
-    { id: 'all', name: 'All', icon: <Sparkles className="w-4 h-4" />, color: 'text-white' },
-    { id: 'getting-started', name: 'Getting Started', icon: <Lightbulb className="w-4 h-4" />, color: 'text-yellow-400' },
-    { id: 'validation', name: 'Validation', icon: <TrendingUp className="w-4 h-4" />, color: 'text-blue-400' },
-    { id: 'mentorship', name: 'Mentorship', icon: <Users className="w-4 h-4" />, color: 'text-green-400' },
-    { id: 'funding', name: 'Funding', icon: <DollarSign className="w-4 h-4" />, color: 'text-purple-400' },
-    { id: 'roadmap', name: 'Roadmap', icon: <MapPin className="w-4 h-4" />, color: 'text-indigo-400' },
-    { id: 'research', name: 'Research', icon: <FileText className="w-4 h-4" />, color: 'text-teal-400' }
-  ];
-
-  // Enhanced welcome message
   useEffect(() => {
-    const welcomeMessage: Message = {
-      id: '1',
-      text: "Welcome to Startup GPS! I'm your AI-powered entrepreneurial assistant. I can help you with startup validation, mentorship connections, funding opportunities, strategic planning, and much more. What would you like to explore today?",
-      sender: 'bot',
-      timestamp: new Date().toISOString(),
-      confidence: 1.0,
-      intent: 'greeting',
-      followUps: [
-        'What is Startup GPS?',
-        'Help me validate my idea',
-        'Find me a mentor',
-        'Show me funding options'
-      ]
-    };
-    setMessages([welcomeMessage]);
+    loadWelcomeData();
   }, []);
 
-  // Auto scroll
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }, 100);
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // Enhanced send message function
-  const sendMessage = async (text: string = input) => {
-    if (!text.trim()) return;
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px';
+    }
+  }, [input]);
+
+  const loadWelcomeData = async () => {
+    try {
+      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+      
+      const response = await fetch(`${API_BASE_URL}/chat/welcome`, {
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` })
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setWelcomeData(data);
+      }
+    } catch (error) {
+      console.error('Failed to load welcome data:', error);
+      setWelcomeData({
+        user: { name: 'Guest', authenticated: false },
+        stats: { ideas: 0, roadmaps: 0, research: 0 },
+        features: [
+          { id: 'idea', name: 'Idea Validation', icon: 'lightbulb' },
+          { id: 'research', name: 'Research Finder', icon: 'book' },
+          { id: 'roadmap', name: 'Roadmap Generator', icon: 'map' },
+          { id: 'team', name: 'Team Builder', icon: 'users' }
+        ]
+      });
+    }
+  };
+
+  const sendMessage = async (messageText: string = input) => {
+    if (!messageText.trim()) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      text: text.trim(),
+      text: messageText.trim(),
       sender: 'user',
-      timestamp: new Date().toISOString()
+      timestamp: new Date()
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
     setIsTyping(true);
-    setShowSuggestions(false);
-    setError('');
-
-    const startTime = Date.now();
+    setShowWelcome(false);
 
     try {
-      // Using your existing chat endpoint
-      const response = await fetch('http://localhost:8000/chat', {
+      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+      
+      const response = await fetch(`${API_BASE_URL}/chat/message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` })
         },
         body: JSON.stringify({
-          message: text
+          message: messageText,
+          session_id: sessionId,
+          include_realtime_data: true
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (response.ok) {
+        const data = await response.json();
+        
+        setTimeout(() => {
+          const botMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            text: data.reply,
+            sender: 'bot',
+            timestamp: new Date(),
+            data: data.data,
+            followUps: data.follow_ups,
+            isAction: data.data?.action,
+            actionStatus: data.data?.action ? 'complete' : undefined
+          };
+
+          setMessages(prev => [...prev, botMessage]);
+          setIsTyping(false);
+        }, 600);
+      } else {
+        throw new Error('Failed to get response');
       }
 
-      const data = await response.json();
-      const responseTime = ((Date.now() - startTime) / 1000).toFixed(1);
-      
-      // Update stats
-      setChatStats(prev => ({
-        interactions: prev.interactions + 1,
-        sessions: prev.sessions,
-        avgResponse: `${responseTime}s`,
-        confidence: 95
-      }));
-
-      // Simulate typing delay
-      const typingDelay = Math.min(2000, Math.max(1000, data.reply.length * 10));
-      
-      setTimeout(() => {
-        const botMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          text: data.reply,
-          sender: 'bot',
-          timestamp: new Date().toISOString(),
-          intent: data.intent || 'general',
-          confidence: 0.95,
-          followUps: data.follow_ups || ['Tell me more', 'What else can you help with?', 'How do I get started?']
-        };
-
-        setMessages(prev => [...prev, botMessage]);
-        setIsTyping(false);
-      }, typingDelay);
-
-    } catch (error: any) {
+    } catch (error) {
       console.error('Chat error:', error);
-      setError('Connection issue detected. Please check your backend server.');
       
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: "I'm having trouble connecting right now. Please make sure your backend server is running on localhost:8000. In the meantime, I can tell you that Startup GPS offers AI-powered startup validation, mentorship connections, funding opportunities, and strategic planning tools.",
+        text: 'Sorry, I encountered an error. Please try again or contact admin support.',
         sender: 'bot',
-        timestamp: new Date().toISOString(),
-        confidence: 1.0,
-        intent: 'error',
-        followUps: ['Try again', 'Learn more about features', 'Check server status']
+        timestamp: new Date(),
+        actionStatus: 'error'
       };
 
       setMessages(prev => [...prev, errorMessage]);
@@ -263,19 +327,6 @@ const Help = () => {
     }
   };
 
-  // Voice input toggle (mock implementation)
-  const toggleVoiceInput = () => {
-    setIsListening(!isListening);
-    if (!isListening) {
-      setTimeout(() => {
-        setIsListening(false);
-        setInput("Help me with my startup");
-        inputRef.current?.focus();
-      }, 3000);
-    }
-  };
-
-  // Handle keyboard input
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -283,382 +334,286 @@ const Help = () => {
     }
   };
 
-  // Clear chat function
   const clearChat = () => {
-    if (messages.length > 1) {
-      const confirmClear = window.confirm('Are you sure you want to clear the conversation?');
-      if (!confirmClear) return;
-    }
-
     setMessages([]);
-    setSessionId('');
-    setShowSuggestions(true);
-    setError('');
-    setChatStats(prev => ({ 
-      ...prev, 
-      sessions: prev.sessions + 1,
-      interactions: 0 
-    }));
-    
-    setTimeout(() => {
-      const welcomeMessage: Message = {
-        id: Date.now().toString(),
-        text: "Fresh start! How can I help you with your startup journey today?",
-        sender: 'bot',
-        timestamp: new Date().toISOString(),
-        confidence: 1.0,
-        followUps: ['What is Startup GPS?', 'Validate my idea', 'Find mentors', 'Get funding help']
-      };
-      setMessages([welcomeMessage]);
-    }, 200);
+    setShowWelcome(true);
+    loadWelcomeData();
   };
 
-  // Filter suggestions
-  const filteredSuggestions = currentCategory === 'all' 
-    ? suggestedActions 
-    : suggestedActions.filter(action => action.category === currentCategory);
+  const formatMessage = (text: string) => {
+    return text.split('\n').map((line, i) => {
+      if (line.startsWith('**') && line.endsWith('**')) {
+        return <div key={i} className="font-semibold text-base mb-2 text-indigo-300">{line.slice(2, -2)}</div>;
+      }
+      
+      const boldRegex = /\*\*(.*?)\*\*/g;
+      if (boldRegex.test(line)) {
+        const parts = line.split(boldRegex);
+        return (
+          <div key={i} className="mb-1">
+            {parts.map((part, j) => 
+              j % 2 === 0 ? part : <strong key={j} className="font-medium text-indigo-200">{part}</strong>
+            )}
+          </div>
+        );
+      }
+      
+      if (line.startsWith('• ') || line.startsWith('- ')) {
+        return (
+          <div key={i} className="ml-4 flex items-start mb-1">
+            <span className="text-indigo-400 mr-2">•</span>
+            <span>{line.slice(2)}</span>
+          </div>
+        );
+      }
+      
+      if (line.trim() === '') return <div key={i} className="h-2" />;
+      
+      return <div key={i} className="mb-1">{line}</div>;
+    });
+  };
+
+  const renderActionData = (message: Message) => {
+    if (!message.data || !message.data.action) return null;
+    
+    switch (message.data.action) {
+      case 'show_validation':
+        return <ValidationDisplay data={message.data} />;
+      case 'show_roadmap':
+        return <RoadmapDisplay data={message.data} />;
+      case 'show_research':
+        return <ResearchDisplay data={message.data} />;
+      default:
+        return null;
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black text-white relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute inset-0">
-        <div className="absolute top-20 left-20 w-96 h-96 bg-gradient-to-r from-blue-500/5 to-cyan-500/5 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-20 right-20 w-96 h-96 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-full blur-3xl animate-pulse"></div>
-      </div>
-      
-      <div className="relative z-10">
-        {/* Header */}
-        <div className="text-center pt-8 pb-6 px-4">
-          <div className="flex items-center justify-center gap-4 mb-6">
-            <div className="w-16 h-16 bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 rounded-3xl flex items-center justify-center shadow-2xl">
-              <MessageCircle className="w-8 h-8 text-white animate-pulse" />
+    <div className="min-h-screen bg-[#0f172a] text-white">
+      {/* Header */}
+      <div className="bg-[#1e293b] border-b border-gray-800 px-6 py-4">
+        <div className="flex items-center justify-between max-w-7xl mx-auto">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
+              <MessageCircle className="w-5 h-5" />
             </div>
-            <div className="text-left">
-              <h1 className="text-4xl sm:text-6xl font-extrabold bg-gradient-to-r from-white via-blue-100 to-cyan-100 bg-clip-text text-transparent">
-                AI Assistant
-              </h1>
-              <p className="text-sm text-blue-400 font-medium mt-1">
-                Powered by Startup GPS AI
+            <div>
+              <h1 className="text-xl font-bold text-white">AI Assistant</h1>
+              <p className="text-sm text-gray-400">
+                {welcomeData?.user.authenticated 
+                  ? `${welcomeData.user.name} • Enhanced AI` 
+                  : 'Guest Mode'}
               </p>
             </div>
           </div>
           
-          {/* Stats */}
-          <div className="flex flex-wrap justify-center items-center gap-4 mb-6">
-            <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/40 backdrop-blur-sm rounded-2xl border border-gray-700/30">
-              <Activity className="w-4 h-4 text-green-400" />
-              <span className="text-sm text-gray-300">{chatStats.interactions} interactions</span>
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/40 backdrop-blur-sm rounded-2xl border border-gray-700/30">
-              <Clock className="w-4 h-4 text-blue-400" />
-              <span className="text-sm text-gray-300">Avg: {chatStats.avgResponse}</span>
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-gray-800/40 backdrop-blur-sm rounded-2xl border border-gray-700/30">
-              <Brain className="w-4 h-4 text-purple-400" />
-              <span className="text-sm text-gray-300">Confidence: {chatStats.confidence}%</span>
-            </div>
-          </div>
-
-          <p className="text-lg text-gray-300 max-w-4xl mx-auto leading-relaxed">
-            Your intelligent entrepreneurial companion for startup success.
-          </p>
-        </div>
-
-        <div className="max-w-7xl mx-auto px-4 pb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Main Chat Container */}
-            <div className="lg:col-span-3 bg-gray-800/30 backdrop-blur-xl rounded-3xl border border-gray-700/20 shadow-2xl overflow-hidden">
-              {/* Chat Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-700/30 bg-gradient-to-r from-gray-800/60 to-gray-800/40">
-                <div className="flex items-center space-x-4">
-                  <div className="w-14 h-14 bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-xl">
-                    <Bot className="w-7 h-7 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="font-bold text-white text-xl">Startup GPS AI</h2>
-                    <div className="flex items-center gap-2 text-sm text-gray-400">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span>Online • Ready to help</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => setSoundEnabled(!soundEnabled)}
-                    className={`p-3 rounded-xl transition-all ${
-                      soundEnabled 
-                        ? 'text-blue-400 bg-blue-500/10' 
-                        : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
-                    }`}
-                  >
-                    {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-                  </button>
-
-                  <button
-                    onClick={toggleVoiceInput}
-                    className={`p-3 rounded-xl transition-all ${
-                      isListening 
-                        ? 'bg-red-500/20 text-red-400 animate-pulse' 
-                        : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
-                    }`}
-                  >
-                    {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-                  </button>
-                  
-                  <button
-                    onClick={clearChat}
-                    className="p-3 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Chat Content */}
-              <div className="h-[600px] flex flex-col">
-                {/* Error Display */}
-                {error && (
-                  <div className="mx-6 mt-4 p-4 bg-red-900/20 border border-red-500/50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <AlertCircle className="w-5 h-5 text-red-400" />
-                      <p className="text-red-400 text-sm">{error}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Messages Area */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex items-start space-x-4 ${
-                        message.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''
-                      }`}
-                    >
-                      {/* Avatar */}
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${
-                        message.sender === 'user'
-                          ? 'bg-gradient-to-r from-green-400 to-emerald-500'
-                          : 'bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500'
-                      }`}>
-                        {message.sender === 'user' ? (
-                          <User className="w-6 h-6 text-white" />
-                        ) : (
-                          <Bot className="w-6 h-6 text-white" />
-                        )}
-                      </div>
-
-                      {/* Message Content */}
-                      <div className={`max-w-[85%] ${message.sender === 'user' ? 'text-right' : ''}`}>
-                        <div className={`px-6 py-4 rounded-3xl shadow-xl backdrop-blur-sm border ${
-                          message.sender === 'user'
-                            ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-br-lg border-blue-400/20'
-                            : 'bg-gray-700/40 text-gray-100 rounded-bl-lg border-gray-600/30'
-                        }`}>
-                          <p className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
-                            {message.text}
-                          </p>
-                        </div>
-                        
-                        {/* Follow-up suggestions */}
-                        {message.followUps && message.followUps.length > 0 && message.sender === 'bot' && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {message.followUps.map((followUp, index) => (
-                              <button
-                                key={index}
-                                onClick={() => sendMessage(followUp)}
-                                className="px-3 py-1.5 text-xs bg-white/20 backdrop-blur-sm text-white rounded-full hover:bg-white/30 transition-colors border border-white/30"
-                              >
-                                {followUp}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className={`mt-1 text-xs text-white/50 ${
-                          message.sender === 'user' ? 'text-right' : 'text-left'
-                        }`}>
-                          {new Date(message.timestamp).toLocaleTimeString()}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Typing Indicator */}
-                  {isTyping && (
-                    <div className="flex items-start space-x-4">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 flex items-center justify-center">
-                        <Bot className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="bg-gray-700/40 px-6 py-4 rounded-3xl rounded-bl-lg border border-gray-600/30">
-                        <div className="flex space-x-1">
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div ref={messagesEndRef} />
-                </div>
-
-                {/* Quick Suggestions */}
-                {showSuggestions && messages.length <= 1 && (
-                  <div className="p-6 border-t border-gray-700/30 bg-gray-800/20">
-                    {/* Category filters */}
-                    <div className="flex flex-wrap gap-2 mb-6">
-                      {categories.map((category) => (
-                        <button
-                          key={category.id}
-                          onClick={() => setCurrentCategory(category.id)}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-medium transition-all ${
-                            currentCategory === category.id
-                              ? 'bg-blue-500/20 text-blue-300 border border-blue-400/40'
-                              : 'bg-gray-700/30 text-gray-400 hover:bg-gray-600/40 border border-gray-600/20'
-                          }`}
-                        >
-                          {category.icon}
-                          {category.name}
-                        </button>
-                      ))}
-                    </div>
-                    
-                    <p className="text-sm text-gray-400 mb-4">
-                      Choose from our popular startup assistance options:
-                    </p>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {filteredSuggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          onClick={() => sendMessage(suggestion.text)}
-                          className="group flex items-start space-x-4 p-4 bg-gray-700/20 hover:bg-gray-700/40 rounded-2xl transition-all border border-gray-600/20 hover:border-gray-500/40 text-left"
-                        >
-                          <div className={`w-10 h-10 bg-gradient-to-r ${suggestion.gradient} rounded-2xl flex items-center justify-center shadow-lg`}>
-                            {suggestion.icon}
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-white text-sm mb-1">
-                              {suggestion.text}
-                            </h3>
-                            <p className="text-xs text-gray-400">
-                              {suggestion.description}
-                            </p>
-                          </div>
-                          <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-gray-300 transition-colors" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Input Area */}
-              <div className="p-6 border-t border-gray-700/30 bg-gray-800/30">
-                <div className="flex items-end space-x-4">
-                  <div className="flex-1 relative">
-                    <textarea
-                      ref={inputRef}
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      placeholder={
-                        isListening 
-                          ? "Listening... Speak your question" 
-                          : "Ask me anything about your startup journey..."
-                      }
-                      className={`w-full px-6 py-4 bg-gray-700/40 backdrop-blur-sm border rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent resize-none min-h-[60px] max-h-40 transition-all ${
-                        isListening 
-                          ? 'border-red-400/60 bg-red-500/5 focus:ring-red-400/50 animate-pulse' 
-                          : 'border-gray-600/40 focus:ring-blue-500'
-                      }`}
-                      rows={1}
-                      disabled={isLoading || isListening}
-                      maxLength={2000}
-                    />
-
-                    {/* Voice input indicator */}
-                    {isListening && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-red-500/5 rounded-2xl">
-                        <div className="flex items-center gap-3 text-red-400">
-                          <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                            <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                          </div>
-                          <span className="text-sm font-medium">Listening...</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <button
-                    onClick={() => sendMessage()}
-                    disabled={!input.trim() || isLoading || isListening}
-                    className="p-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl transition-all shadow-xl"
-                  >
-                    {isLoading ? (
-                      <RefreshCw className="w-6 h-6 animate-spin" />
-                    ) : (
-                      <Send className="w-6 h-6" />
-                    )}
-                  </button>
-                </div>
-                
-                <div className="mt-4 text-xs text-gray-500 text-center">
-                  Powered by Startup GPS AI • Your entrepreneurial co-pilot
-                </div>
-              </div>
-            </div>
-
-            {/* Sidebar */}
-            <div className="lg:col-span-1 space-y-6">
-              {/* Quick Actions */}
-              <div className="bg-gray-800/30 backdrop-blur-xl rounded-3xl p-6 border border-gray-700/20">
-                <h3 className="text-xl font-bold text-white mb-4">Quick Actions</h3>
-                <div className="space-y-3">
-                  {[
-                    { text: "Validate My Idea", action: "Validate my startup idea", icon: TrendingUp },
-                    { text: "Find Mentors", action: "Connect me with mentors", icon: Users },
-                    { text: "Get Funding Help", action: "Help me find funding", icon: DollarSign },
-                    { text: "Create Roadmap", action: "Generate a roadmap", icon: MapPin }
-                  ].map((action, index) => (
-                    <button
-                      key={index}
-                      onClick={() => sendMessage(action.action)}
-                      className="w-full text-left p-3 bg-gray-700/20 hover:bg-gray-700/40 rounded-2xl transition-all group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <action.icon className="w-5 h-5 text-blue-400" />
-                        <span className="text-sm text-white">{action.text}</span>
-                        <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-gray-300 ml-auto" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Help Section */}
-              <div className="bg-gradient-to-br from-blue-500/10 to-purple-600/10 rounded-3xl p-6 border border-blue-500/20">
-                <h3 className="text-xl font-bold text-white mb-4">Need Help?</h3>
-                <p className="text-sm text-gray-300 mb-4">
-                  I'm available 24/7 to help with your startup journey.
-                </p>
-                <button
-                  onClick={() => sendMessage("Tell me about all your features and how you can help me")}
-                  className="w-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 px-4 py-2 rounded-xl transition-all border border-blue-400/40"
-                >
-                  Learn More
-                </button>
-              </div>
-            </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowContactModal(true)}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-all flex items-center space-x-2 text-sm"
+            >
+              <Mail className="w-4 h-4" />
+              <span>Contact Admin</span>
+            </button>
+            
+            <button
+              onClick={clearChat}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-all flex items-center space-x-2 text-sm"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Clear Chat</span>
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Stats */}
+      {welcomeData?.user.authenticated && (
+        <div className="bg-[#1e293b]/50 border-b border-gray-800 px-6 py-3">
+          <div className="grid grid-cols-3 gap-3 max-w-7xl mx-auto">
+            <div className="bg-yellow-500/10 rounded-lg p-3 border border-yellow-500/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xl font-bold text-yellow-400">{welcomeData.stats.ideas}</div>
+                  <div className="text-xs text-gray-400">Ideas</div>
+                </div>
+                <Lightbulb className="w-5 h-5 text-yellow-400/60" />
+              </div>
+            </div>
+            <div className="bg-blue-500/10 rounded-lg p-3 border border-blue-500/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xl font-bold text-blue-400">{welcomeData.stats.roadmaps}</div>
+                  <div className="text-xs text-gray-400">Roadmaps</div>
+                </div>
+                <MapPin className="w-5 h-5 text-blue-400/60" />
+              </div>
+            </div>
+            <div className="bg-green-500/10 rounded-lg p-3 border border-green-500/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xl font-bold text-green-400">{welcomeData.stats.research}</div>
+                  <div className="text-xs text-gray-400">Research</div>
+                </div>
+                <FileText className="w-5 h-5 text-green-400/60" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Area */}
+      <div className="h-[calc(100vh-200px)] overflow-y-auto px-6 py-4">
+        <div className="max-w-4xl mx-auto space-y-4">
+          {/* Welcome */}
+          {showWelcome && welcomeData && messages.length === 0 && (
+            <div className="space-y-4">
+              <div className="bg-[#1e293b] rounded-lg p-5 border border-gray-700">
+                <div className="flex items-start space-x-3">
+                  <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center flex-shrink-0">
+                    <Bot className="w-5 h-5 text-indigo-400" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-lg font-semibold text-white mb-2">
+                      Hey {welcomeData.user.name}! Ready to build something amazing?
+                    </div>
+                    <p className="text-gray-300 text-sm">
+                      I can validate ideas, create roadmaps, find research, and help you build your team.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {['Validate: AI tutoring platform', 'Create 3-month roadmap', 'Find research on edtech', 'Show my activity'].map((action) => (
+                  <button
+                    key={action}
+                    onClick={() => sendMessage(action)}
+                    className="px-3 py-2 bg-[#1e293b] hover:bg-[#334155] border border-gray-700 rounded-lg text-xs transition-all"
+                  >
+                    {action}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Messages */}
+          {messages.map((message) => (
+            <div key={message.id}>
+              <div className={`flex items-start space-x-3 ${message.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                  message.sender === 'user'
+                    ? 'bg-purple-500/10 text-purple-400'
+                    : 'bg-indigo-500/10 text-indigo-400'
+                }`}>
+                  {message.sender === 'user' ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
+                </div>
+
+                <div className={`flex-1 ${message.sender === 'user' ? 'flex justify-end' : ''}`}>
+                  <div className={`max-w-2xl ${
+                    message.sender === 'user'
+                      ? 'bg-purple-600 px-4 py-3 rounded-lg'
+                      : 'bg-[#1e293b] border border-gray-700 px-4 py-3 rounded-lg'
+                  }`}>
+                    {message.actionStatus === 'processing' && (
+                      <div className="flex items-center space-x-2 mb-2 text-blue-400">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-xs">Processing...</span>
+                      </div>
+                    )}
+                    
+                    {message.actionStatus === 'complete' && (
+                      <div className="flex items-center space-x-2 mb-2 text-green-400">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span className="text-xs">Completed</span>
+                      </div>
+                    )}
+                    
+                    {message.actionStatus === 'error' && (
+                      <div className="flex items-center space-x-2 mb-2 text-red-400">
+                        <AlertCircle className="w-4 h-4" />
+                        <span className="text-xs">Error</span>
+                      </div>
+                    )}
+                    
+                    <div className="text-sm leading-relaxed">
+                      {formatMessage(message.text)}
+                    </div>
+                    
+                    {renderActionData(message)}
+
+                    <div className="flex items-center space-x-2 mt-2 pt-2 border-t border-white/10 text-xs text-gray-500">
+                      <Clock className="w-3 h-3" />
+                      <span>{message.timestamp.toLocaleTimeString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {message.followUps && message.followUps.length > 0 && (
+                <div className="ml-13 mt-2 flex flex-wrap gap-2">
+                  {message.followUps.map((followUp, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => sendMessage(followUp)}
+                      className="px-3 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 text-xs rounded-lg transition-all"
+                    >
+                      {followUp}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {isTyping && (
+            <div className="flex items-start space-x-3">
+              <div className="w-10 h-10 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
+                <Bot className="w-5 h-5" />
+              </div>
+              <div className="bg-[#1e293b] border border-gray-700 px-4 py-3 rounded-lg">
+                <div className="flex space-x-1.5">
+                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      {/* Input */}
+      <div className="bg-[#1e293b] border-t border-gray-800 px-6 py-4">
+        <div className="max-w-4xl mx-auto flex items-end space-x-3">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Ask me anything..."
+            className="flex-1 px-4 py-3 bg-[#0f172a] border border-gray-700 focus:border-indigo-500 rounded-lg text-white placeholder-gray-500 focus:outline-none resize-none"
+            rows={1}
+            disabled={isLoading}
+            style={{ maxHeight: '120px' }}
+          />
+          
+          <button
+            onClick={() => sendMessage()}
+            disabled={!input.trim() || isLoading}
+            className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-all flex items-center space-x-2"
+          >
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+          </button>
+        </div>
+      </div>
+
+      <ContactAdminModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
     </div>
   );
 };
 
-export default Help;
+export default StartupGPSChatbot;

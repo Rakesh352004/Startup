@@ -17,6 +17,14 @@ export default function ResearchAdvisor() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [sourceStats, setSourceStats] = useState<{[key: string]: number}>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const papersPerPage = 10;
+
+  // Calculate pagination values
+  const totalPages = Math.ceil(papers.length / papersPerPage);
+  const startIndex = (currentPage - 1) * papersPerPage;
+  const endIndex = startIndex + papersPerPage;
+  const currentPapers = papers.slice(startIndex, endIndex);
 
   const fetchResearchPapers = async () => {
     if (!idea.trim()) {
@@ -26,40 +34,49 @@ export default function ResearchAdvisor() {
 
     setIsLoading(true);
     setError('');
+    setCurrentPage(1); // Reset to first page on new search
 
     try {
-      // Note: localStorage is not available in this environment
-      // This would need to be adapted for your actual implementation
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Please log in to access research papers');
+        setIsLoading(false);
+        return;
+      }
+
       console.log('🔍 Sending request to backend...');
+      const response = await fetch('http://localhost:8000/research-papers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          idea: idea.trim(), 
+          max_results: 30 // Increased to 30 to get 10 from each API
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = 'Failed to fetch research papers';
+        
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.detail || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      console.log('📊 Received data:', data);
       
-      // Simulated response for demonstration
-      const mockData = {
-        papers: [
-          {
-            title: "Advances in Machine Learning for Sustainable Energy Systems",
-            authors: ["Smith, J.", "Doe, A.", "Johnson, M."],
-            abstract: "This paper presents novel approaches to applying machine learning techniques in sustainable energy systems. We explore deep learning models for energy prediction and optimization, demonstrating significant improvements in efficiency and cost reduction. Our methodology combines reinforcement learning with predictive analytics to create adaptive energy management systems.",
-            published_date: "2024-03-15",
-            source: "Semantic Scholar",
-            url: "https://example.com/paper1",
-            doi: "10.1000/182"
-          },
-          {
-            title: "Blockchain Applications in Renewable Energy Trading",
-            authors: ["Wilson, K.", "Brown, L."],
-            abstract: "We investigate the potential of blockchain technology in creating decentralized renewable energy trading platforms. This research examines smart contracts for peer-to-peer energy transactions and their impact on grid stability and energy democratization.",
-            published_date: "2024-02-20",
-            source: "arXiv",
-            url: "https://arxiv.org/abs/2024.02.20",
-            doi: "10.48550/arXiv.2024.02.20"
-          }
-        ],
-        search_terms: ["machine learning", "sustainable energy", "renewable energy", "blockchain", "energy systems"]
-      };
-      
-      const receivedPapers = mockData.papers || [];
+      const receivedPapers = data.papers || [];
       setPapers(receivedPapers);
-      setSearchTerms(mockData.search_terms || []);
+      setSearchTerms(data.search_terms || []);
       
       const stats: {[key: string]: number} = {};
       receivedPapers.forEach((paper: ResearchPaper) => {
@@ -83,6 +100,25 @@ export default function ResearchAdvisor() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handlePageClick = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const formatDate = (dateString: string) => {
@@ -253,6 +289,11 @@ export default function ResearchAdvisor() {
               </div>
               <p className="text-sm text-blue-400">
                 Total: {papers.length} papers from {Object.keys(sourceStats).length} source{Object.keys(sourceStats).length !== 1 ? 's' : ''}
+                {papers.length > 0 && (
+                  <span className="ml-4">
+                    Showing page {currentPage} of {totalPages} (papers {startIndex + 1}-{Math.min(endIndex, papers.length)})
+                  </span>
+                )}
               </p>
             </div>
           )}
@@ -262,13 +303,13 @@ export default function ResearchAdvisor() {
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-blue-200">Relevant Research Papers</h2>
                 <span className="text-sm text-blue-400 bg-black/50 px-3 py-1 rounded-full border border-blue-500/30">
-                  Found {papers.length} paper{papers.length !== 1 ? 's' : ''}
+                  Page {currentPage} of {totalPages}
                 </span>
               </div>
               
-              {papers.map((paper, index) => (
+              {currentPapers.map((paper, index) => (
                 <div 
-                  key={index} 
+                  key={startIndex + index} 
                   className="bg-black/50 border border-blue-500/30 rounded-xl p-6 backdrop-blur-sm hover:bg-black/60 hover:border-blue-400/40 transition-all duration-300"
                 >
                   <div className="flex items-start justify-between mb-4">
@@ -335,6 +376,53 @@ export default function ResearchAdvisor() {
                   </div>
                 </div>
               ))}
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center space-x-4 mt-12 pt-8 border-t border-blue-500/30">
+                  <button
+                    onClick={handlePreviousPage}
+                    disabled={currentPage === 1}
+                    className="flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 text-white font-medium rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Previous
+                  </button>
+
+                  {/* Page Numbers */}
+                  <div className="flex items-center space-x-2">
+                    {[...Array(totalPages)].map((_, index) => {
+                      const pageNumber = index + 1;
+                      return (
+                        <button
+                          key={pageNumber}
+                          onClick={() => handlePageClick(pageNumber)}
+                          className={`w-10 h-10 rounded-lg font-medium transition-all duration-300 ${
+                            currentPage === pageNumber
+                              ? 'bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg'
+                              : 'bg-black/40 text-blue-300 hover:bg-blue-600/20 border border-blue-500/30'
+                          }`}
+                        >
+                          {pageNumber}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={handleNextPage}
+                    disabled={currentPage === totalPages}
+                    className="flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 text-white font-medium rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                    <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
           )}
           
@@ -345,7 +433,7 @@ export default function ResearchAdvisor() {
                 <div>
                   <span className="text-blue-200 font-medium">Searching across multiple academic databases...</span>
                   <p className="text-sm text-blue-400 mt-1">
-                    Fetching from Semantic Scholar, arXiv, and CrossRef...
+                    Fetching 30 papers from Semantic Scholar, arXiv, and CrossRef...
                   </p>
                 </div>
               </div>

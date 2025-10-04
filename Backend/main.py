@@ -20,6 +20,8 @@ from dotenv import load_dotenv
 from datetime import datetime
 import uuid
 import requests
+from collections import defaultdict
+from enhanced_realtime_chatbot import StartupGPSRealtimeChatbot, ChatMessage, ChatResponse
 
 from database import (
     users_collection, ideas_collection, profiles_collection, roadmaps_collection, 
@@ -38,17 +40,16 @@ from database import (
     send_message_fixed as send_message, 
     get_messages_fixed as get_messages,disconnect_users  
 )
-from enhanced_chatbot import StartupGPSChatbotEnhanced, integrate_enhanced_chatbot_with_main
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 
-# Enhanced chatbot imports (if available)
-try:
-    from Backend.enhanced_chatbot import enhanced_chatbot, ChatContext
-except ImportError:
-    enhanced_chatbot = None
-    ChatContext = None
+from enhanced_realtime_chatbot import (
+    StartupGPSRealtimeChatbot, 
+    ChatMessage, 
+    ChatResponse,
+    get_chatbot_instance
+)
 
 # Load environment variables
 load_dotenv()
@@ -91,6 +92,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+
 )
 
 # Security - auto_error=False allows optional authentication
@@ -1274,12 +1277,12 @@ def generate_search_terms(idea: str) -> List[str]:
     return filtered_words[:5] if filtered_words else ["startup", "technology", "innovation"]
 
 async def fetch_semantic_scholar(search_terms: List[str], max_results: int) -> List[ResearchPaper]:
-    """Fetch papers from Semantic Scholar"""
+    """Fetch papers from Semantic Scholar - always fetch 10 papers"""
     try:
         query = " ".join(search_terms[:2])
         params = {
             "query": query,
-            "limit": min(max_results, 10),
+            "limit": 10,  # Always fetch 10 papers from Semantic Scholar
             "fields": "title,authors,abstract,year,url,externalIds",
             "sort": "relevance"
         }
@@ -1326,60 +1329,8 @@ async def fetch_semantic_scholar(search_terms: List[str], max_results: int) -> L
         logger.warning(f"Semantic Scholar fetch failed: {e}")
         return []
 
-def parse_arxiv_response(xml_text: str, max_results: int) -> List[ResearchPaper]:
-    """Helper to parse arXiv XML into ResearchPaper objects"""
-    try:
-        root = ET.fromstring(xml_text)
-        papers = []
-
-        entries = root.findall('{http://www.w3.org/2005/Atom}entry')
-
-        for entry in entries:
-            try:
-                title_elem = entry.find('{http://www.w3.org/2005/Atom}title')
-                title = title_elem.text.strip() if title_elem is not None else "No title"
-
-                summary_elem = entry.find('{http://www.w3.org/2005/Atom}summary')
-                abstract = summary_elem.text.strip() if summary_elem is not None else "No abstract available"
-                if len(abstract) > 500:
-                    abstract = abstract[:500] + "..."
-
-                authors = []
-                for author_elem in entry.findall('{http://www.w3.org/2005/Atom}author'):
-                    name_elem = author_elem.find('{http://www.w3.org/2005/Atom}name')
-                    if name_elem is not None and name_elem.text:
-                        authors.append(name_elem.text.strip())
-
-                published_elem = entry.find('{http://www.w3.org/2005/Atom}published')
-                published_date = published_elem.text if published_elem is not None else ""
-
-                id_elem = entry.find('{http://www.w3.org/2005/Atom}id')
-                url = id_elem.text if id_elem is not None else ""
-
-                papers.append(ResearchPaper(
-                    title=title,
-                    authors=authors,
-                    abstract=abstract,
-                    published_date=published_date,
-                    source="arXiv",
-                    url=url
-                ))
-
-            except Exception as e:
-                logger.warning(f"Error processing arXiv entry: {e}")
-                continue
-
-        return papers[:max_results]
-        
-    except ET.ParseError as e:
-        logger.warning(f"XML parsing error: {e}")
-        return []
-    except Exception as e:
-        logger.warning(f"Error parsing arXiv response: {e}")
-        return []
-
 async def fetch_arxiv(search_terms: List[str], max_results: int) -> List[ResearchPaper]:
-    """Fetch papers from arXiv"""
+    """Fetch papers from arXiv - always fetch 10 papers"""
     try:
         if not search_terms:
             return []
@@ -1396,7 +1347,7 @@ async def fetch_arxiv(search_terms: List[str], max_results: int) -> List[Researc
         params = {
             "search_query": query,
             "start": 0,
-            "max_results": min(max_results, 20),
+            "max_results": 10,  # Always fetch 10 papers from arXiv
             "sortBy": "relevance",
             "sortOrder": "descending"
         }
@@ -1410,28 +1361,28 @@ async def fetch_arxiv(search_terms: List[str], max_results: int) -> List[Researc
                 logger.warning(f"arXiv error {response.status_code}")
                 return []
 
-            papers = parse_arxiv_response(response.text, max_results)
+            papers = parse_arxiv_response(response.text, 10)  # Parse up to 10 papers
 
             if not papers:
                 fallback_query = "machine learning OR neural network OR optimization"
                 params["search_query"] = fallback_query
                 response = await client.get(ARXIV_API, params=params, headers=headers)
                 if response.status_code == 200:
-                    papers = parse_arxiv_response(response.text, max_results)
+                    papers = parse_arxiv_response(response.text, 10)  # Parse up to 10 papers
 
-            return papers[:max_results]
+            return papers
 
     except Exception as e:
         logger.warning(f"arXiv fetch failed: {e}")
         return []
 
 async def fetch_crossref(search_terms: List[str], max_results: int) -> List[ResearchPaper]:
-    """Fetch papers from CrossRef"""
+    """Fetch papers from CrossRef - always fetch 10 papers"""
     try:
         query = " ".join(search_terms[:2])
         params = {
             "query": query,
-            "rows": min(max_results, 20),
+            "rows": 10,  # Always fetch 10 papers from CrossRef
             "sort": "relevance",
             "select": "title,author,abstract,created,URL,DOI,published-print,published-online"
         }
@@ -1499,50 +1450,206 @@ async def fetch_crossref(search_terms: List[str], max_results: int) -> List[Rese
         logger.warning(f"CrossRef fetch failed: {e}")
         return []
 
+def parse_arxiv_response(xml_text: str, max_results: int) -> List[ResearchPaper]:
+    """Helper to parse arXiv XML into ResearchPaper objects - updated to handle 10 papers"""
+    try:
+        root = ET.fromstring(xml_text)
+        papers = []
+
+        entries = root.findall('{http://www.w3.org/2005/Atom}entry')
+
+        for entry in entries:
+            try:
+                title_elem = entry.find('{http://www.w3.org/2005/Atom}title')
+                title = title_elem.text.strip() if title_elem is not None else "No title"
+
+                summary_elem = entry.find('{http://www.w3.org/2005/Atom}summary')
+                abstract = summary_elem.text.strip() if summary_elem is not None else "No abstract available"
+                if len(abstract) > 500:
+                    abstract = abstract[:500] + "..."
+
+                authors = []
+                for author_elem in entry.findall('{http://www.w3.org/2005/Atom}author'):
+                    name_elem = author_elem.find('{http://www.w3.org/2005/Atom}name')
+                    if name_elem is not None and name_elem.text:
+                        authors.append(name_elem.text.strip())
+
+                published_elem = entry.find('{http://www.w3.org/2005/Atom}published')
+                published_date = published_elem.text if published_elem is not None else ""
+
+                id_elem = entry.find('{http://www.w3.org/2005/Atom}id')
+                url = id_elem.text if id_elem is not None else ""
+
+                papers.append(ResearchPaper(
+                    title=title,
+                    authors=authors,
+                    abstract=abstract,
+                    published_date=published_date,
+                    source="arXiv",
+                    url=url
+                ))
+
+            except Exception as e:
+                logger.warning(f"Error processing arXiv entry: {e}")
+                continue
+
+        return papers[:10]  # Return exactly 10 papers maximum
+        
+    except ET.ParseError as e:
+        logger.warning(f"XML parsing error: {e}")
+        return []
+    except Exception as e:
+        logger.warning(f"Error parsing arXiv response: {e}")
+        return []
+
 
 def calculate_match_score_and_details(profile: dict, requirements: dict) -> tuple:
-    """Calculate match score and matched items"""
+    """Calculate match score and matched items with stricter matching"""
     score = 0
     matched_skills = []
     matched_interests = []
     
-    # Skills matching (60% weight)
-    if requirements.get("required_skills"):
+    # Helper function for better matching
+    def normalize_text(text: str) -> str:
+        return text.lower().strip()
+    
+    def is_skill_match(profile_skill: str, req_skill: str) -> bool:
+        """Check if skills match (exact or close match)"""
+        p_skill = normalize_text(profile_skill)
+        r_skill = normalize_text(req_skill)
+        
+        # Exact match
+        if p_skill == r_skill:
+            return True
+        
+        # One contains the other (but must be significant overlap)
+        if len(r_skill) >= 3:  # Minimum 3 chars for substring match
+            if r_skill in p_skill or p_skill in r_skill:
+                # Check if it's at least 70% of the word
+                overlap = min(len(r_skill), len(p_skill))
+                if overlap / max(len(r_skill), len(p_skill)) >= 0.7:
+                    return True
+        
+        return False
+    
+    # 1. REQUIRED SKILLS MATCHING (60% weight) - MOST IMPORTANT
+    req_skills = requirements.get("required_skills", [])
+    if req_skills:
         profile_skills = profile.get("skills", [])
-        req_skills = requirements["required_skills"]
         
-        for skill in profile_skills:
-            for req_skill in req_skills:
-                if (skill.lower() in req_skill.lower() or req_skill.lower() in skill.lower()):
-                    if skill not in matched_skills:
-                        matched_skills.append(skill)
+        for req_skill in req_skills:
+            for profile_skill in profile_skills:
+                if is_skill_match(profile_skill, req_skill):
+                    if profile_skill not in matched_skills:
+                        matched_skills.append(profile_skill)
+                    break  # Move to next required skill
         
-        if req_skills:
-            skill_match_ratio = len(matched_skills) / len(req_skills)
-            score += skill_match_ratio * 60
+        # Calculate skill match ratio
+        skill_match_ratio = len(matched_skills) / len(req_skills) if req_skills else 0
+        score += skill_match_ratio * 60
+    else:
+        # If no required skills specified, give base score
+        score += 30
     
-    # Experience matching (20% weight)
-    if requirements.get("experience") and profile.get("experience"):
-        if profile.get("experience") == requirements["experience"]:
-            score += 20
+    # 2. PREFERRED ROLE MATCHING (15% weight)
+    req_role = requirements.get("preferred_role", "").strip()
+    profile_role = profile.get("preferred_role", "").strip()
     
-    # Interests matching (20% weight)
-    if requirements.get("interests"):
+    if req_role and profile_role:
+        req_role_norm = normalize_text(req_role)
+        profile_role_norm = normalize_text(profile_role)
+        
+        # Exact or substring match
+        if req_role_norm == profile_role_norm or \
+           req_role_norm in profile_role_norm or \
+           profile_role_norm in req_role_norm:
+            score += 15
+        else:
+            # Partial credit for related roles (optional enhancement)
+            role_words = set(req_role_norm.split())
+            profile_words = set(profile_role_norm.split())
+            common_words = role_words.intersection(profile_words)
+            if common_words:
+                score += 7.5  # Half credit
+    
+    # 3. EXPERIENCE LEVEL MATCHING (10% weight)
+    req_experience = requirements.get("experience", "").strip()
+    profile_experience = profile.get("experience", "").strip()
+    
+    if req_experience and profile_experience:
+        if normalize_text(req_experience) == normalize_text(profile_experience):
+            score += 10
+        else:
+            # Give partial credit for adjacent levels
+            exp_levels = ["junior", "mid", "senior"]
+            try:
+                req_idx = exp_levels.index(normalize_text(req_experience))
+                prof_idx = exp_levels.index(normalize_text(profile_experience))
+                if abs(req_idx - prof_idx) == 1:  # Adjacent level
+                    score += 5
+            except ValueError:
+                pass
+    elif not req_experience:
+        # If no experience requirement, give base score
+        score += 5
+    
+    # 4. AVAILABILITY MATCHING (5% weight)
+    req_availability = requirements.get("availability", "").strip()
+    profile_availability = profile.get("availability", "").strip()
+    
+    if req_availability and profile_availability:
+        if normalize_text(req_availability) == normalize_text(profile_availability):
+            score += 5
+    elif not req_availability:
+        score += 2.5
+    
+    # 5. LOCATION MATCHING (5% weight)
+    req_location = requirements.get("location", "").strip()
+    profile_location = profile.get("location", "").strip()
+    
+    if req_location and profile_location:
+        req_loc_norm = normalize_text(req_location)
+        prof_loc_norm = normalize_text(profile_location)
+        
+        # Check for "remote" keyword
+        if "remote" in req_loc_norm and "remote" in prof_loc_norm:
+            score += 5
+        # Check for city/location match
+        elif req_loc_norm in prof_loc_norm or prof_loc_norm in req_loc_norm:
+            score += 5
+        else:
+            # Check for partial location match (e.g., state, country)
+            req_loc_parts = set(req_loc_norm.split())
+            prof_loc_parts = set(prof_loc_norm.split())
+            if req_loc_parts.intersection(prof_loc_parts):
+                score += 2.5
+    elif not req_location:
+        score += 2.5
+    
+    # 6. INTERESTS MATCHING (5% weight) - BONUS
+    req_interests = requirements.get("interests", [])
+    if req_interests:
         profile_interests = profile.get("interests", [])
-        req_interests = requirements["interests"]
         
-        for interest in profile_interests:
-            for req_interest in req_interests:
-                if (interest.lower() in req_interest.lower() or req_interest.lower() in interest.lower()):
-                    if interest not in matched_interests:
-                        matched_interests.append(interest)
+        for req_interest in req_interests:
+            for profile_interest in profile_interests:
+                if is_skill_match(profile_interest, req_interest):
+                    if profile_interest not in matched_interests:
+                        matched_interests.append(profile_interest)
+                    break
         
         if req_interests:
             interest_match_ratio = len(matched_interests) / len(req_interests)
-            score += interest_match_ratio * 20
+            score += interest_match_ratio * 5
     
+    # Ensure score is within valid range
     final_score = min(100, max(0, int(score)))
+    
     return final_score, matched_skills, matched_interests
+
+
+
+
 # ==========================================
 # API ENDPOINTS
 # ==========================================
@@ -1819,12 +1926,13 @@ async def get_research_papers(request: ResearchRequest, current_user=Depends(get
             search_terms = [request.idea]
         
         logger.info(f"Generated search terms: {search_terms}")
+        logger.info(f"Fetching 10 papers from each of the 3 sources for total of 30 papers")
         
-        # Concurrently fetch papers from all sources
+        # Concurrently fetch exactly 10 papers from each source
         tasks = [
-            fetch_semantic_scholar(search_terms, request.max_results),
-            fetch_arxiv(search_terms, request.max_results),
-            fetch_crossref(search_terms, request.max_results)
+            fetch_semantic_scholar(search_terms, 10),
+            fetch_arxiv(search_terms, 10),
+            fetch_crossref(search_terms, 10)
         ]
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1837,9 +1945,12 @@ async def get_research_papers(request: ResearchRequest, current_user=Depends(get
             if isinstance(result, Exception):
                 logger.warning(f"{source_name} failed with error: {result}")
             elif isinstance(result, list):
+                valid_papers = 0
                 for paper in result:
                     if isinstance(paper, ResearchPaper):
                         all_papers.append(paper)
+                        valid_papers += 1
+                logger.info(f"{source_name}: {valid_papers} papers fetched")
         
         logger.info(f"Total papers fetched: {len(all_papers)}")
         
@@ -1858,9 +1969,9 @@ async def get_research_papers(request: ResearchRequest, current_user=Depends(get
                 seen_titles.add(normalized_title)
                 unique_papers.append(paper)
         
-        # Limit final results
-        final_papers = unique_papers[:request.max_results]
-        logger.info(f"Final result: {len(final_papers)} curated papers")
+        # Limit final results to 30
+        final_papers = unique_papers[:30]
+        logger.info(f"Final result: {len(final_papers)} curated papers after deduplication")
         
         research_id = "anonymous"
         
@@ -1894,7 +2005,6 @@ async def get_research_papers(request: ResearchRequest, current_user=Depends(get
     except Exception as e:
         logger.error(f"Research papers endpoint failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch research papers: {str(e)}")
-
 # User Data Endpoints
 @app.get("/user/ideas")
 async def get_my_ideas(current_user=Depends(get_current_user)):
@@ -2172,511 +2282,20 @@ async def test_validation_save(current_user=Depends(get_current_user)):
             "user_id": str(current_user["_id"]) if current_user else None
         }
 
-# Add this to your main.py file after your existing imports and before the endpoints
-
-
-# Initialize enhanced chatbot (add this after your app initialization)
-enhanced_chatbot_system = StartupGPSChatbotEnhanced(GROQ_API_KEY)
-
-# Add this new enhanced chatbot endpoint to your main.py
-
-@app.post("/chat")
-async def enhanced_startup_gps_chat(
-    message_data: dict,
-    current_user=Depends(get_optional_current_user)
-):
-    """
-    Enhanced chatbot endpoint that provides comprehensive explanations 
-    of all Startup GPS platform features using data from main.py
-    """
-    try:
-        message = message_data.get("message", "").strip()
-        
-        if not message:
-            return {
-                "reply": "Hello! I'm your Startup GPS AI assistant. I can provide comprehensive explanations about all our platform features including idea validation, research papers, roadmap generation, user management, and technical integrations. What would you like to know about?",
-                "intent": "greeting",
-                "follow_ups": [
-                    "What is Startup GPS?",
-                    "How does idea validation work?",
-                    "Explain all your features",
-                    "Show me technical capabilities"
-                ],
-                "session_id": str(uuid.uuid4()),
-                "timestamp": datetime.utcnow().isoformat(),
-                "confidence": 1.0,
-                "source": "startup_gps_enhanced_ai"
-            }
-        
-        # Check message length
-        if len(message) > 2000:
-            return {
-                "reply": "Please keep your message under 2000 characters. I'm here to provide detailed explanations about all Startup GPS features - just ask about any specific capability you'd like to understand!",
-                "intent": "error",
-                "follow_ups": [
-                    "Explain idea validation",
-                    "How does research work?",
-                    "Tell me about roadmaps",
-                    "Show me all features"
-                ]
-            }
-        
-        # Get comprehensive response from enhanced chatbot
-        response_data = enhanced_chatbot_system.get_comprehensive_response(message)
-        
-        # Add user context if authenticated
-        user_context = ""
-        if current_user:
-            user_context = f" (User: {current_user.get('name', 'User')})"
-        
-        # Enhance response with real platform data
-        enhanced_response = enhance_response_with_platform_data(
-            response_data["response"], 
-            message.lower(),
-            current_user
-        )
-        
-        return {
-            "reply": enhanced_response,
-            "intent": response_data["intent"],
-            "follow_ups": response_data.get("follow_ups", []),
-            "session_id": str(uuid.uuid4()),
-            "timestamp": datetime.utcnow().isoformat(),
-            "confidence": 0.95,
-            "source": "startup_gps_enhanced_ai" + user_context,
-            "user_authenticated": current_user is not None
-        }
-        
-    except Exception as e:
-        logger.error(f"Enhanced chat error: {e}")
-        return {
-            "reply": f"I encountered a technical issue, but I'm still here to help! Startup GPS offers comprehensive startup assistance with AI-powered idea validation, multi-source research paper access, strategic roadmap generation, secure user management, and developer-friendly APIs. What specific feature would you like to learn about?",
-            "intent": "error",
-            "follow_ups": [
-                "Explain idea validation process",
-                "How does research paper search work?",
-                "Tell me about roadmap generation",
-                "Show me user management features"
-            ],
-            "session_id": str(uuid.uuid4()),
-            "timestamp": datetime.utcnow().isoformat(),
-            "confidence": 0.8,
-            "source": "startup_gps_fallback",
-            "error": str(e)
-        }
-
-def enhance_response_with_platform_data(base_response: str, query_lower: str, current_user=None) -> str:
-    """
-    Enhance chatbot responses with real data from the platform
-    """
-    
-    # Add real statistics and data
-    try:
-        # Get real platform statistics
-        total_users = users_collection.count_documents({}) if users_collection else 0
-        total_ideas = ideas_collection.count_documents({}) if ideas_collection else 0
-        total_roadmaps = roadmaps_collection.count_documents({}) if roadmaps_collection else 0
-        total_research = research_collection.count_documents({}) if research_collection else 0
-        
-        # Add real numbers to responses about platform capabilities
-        if any(term in query_lower for term in ["platform", "features", "capabilities", "what is startup gps"]):
-            stats_addition = f"""
-
-## Real Platform Statistics (Live Data)
-- **{total_users} registered users** actively using our platform
-- **{total_ideas} startup ideas validated** with comprehensive AI analysis
-- **{total_roadmaps} strategic roadmaps generated** with phase-by-phase planning
-- **{total_research} research compilations created** from academic databases
-
-"""
-            base_response += stats_addition
-        
-        # Add user-specific data if authenticated
-        if current_user and any(term in query_lower for term in ["my", "user", "account", "profile"]):
-            try:
-                user_id = str(current_user["_id"])
-                user_stats = get_user_stats(user_id)
-                
-                user_addition = f"""
-
-## Your Startup GPS Activity
-- **{user_stats.get('ideas', 0)} ideas validated** in your account
-- **{user_stats.get('roadmaps', 0)} roadmaps generated** for your projects  
-- **{user_stats.get('research', 0)} research compilations** in your history
-- **Account created:** {current_user.get('created_at', 'Recently').strftime('%B %Y') if isinstance(current_user.get('created_at'), datetime) else 'Recently'}
-
-You can access all your data via the user dashboard or export it anytime for GDPR compliance.
-"""
-                base_response += user_addition
-                
-            except Exception as e:
-                logger.warning(f"Could not add user stats: {e}")
-        
-        # Add real endpoint information for technical queries
-        if any(term in query_lower for term in ["api", "endpoint", "technical", "integration"]):
-            endpoint_addition = f"""
-
-## Live API Endpoints (Currently Active)
-```
-Base URL: {os.getenv('API_BASE_URL', 'http://localhost:8000')}
-
-POST /validate-idea - AI idea validation (Active: {GROQ_API_KEY is not None})
-POST /research-papers - Multi-source research (Active: True)
-POST /generate-roadmap - Strategic planning (Active: {GROQ_API_KEY is not None})
-POST /register - User registration (Active: True)
-POST /login - Authentication (Active: True)
-GET /user/ideas - Your validation history (Active: True)
-GET /user/roadmaps - Your roadmap history (Active: True)
-GET /health - System status (Active: True)
-```
-
-**Current System Status:**
-- Database: {'Connected' if users_collection else 'Disconnected'}
-- GROQ AI: {'Configured' if GROQ_API_KEY else 'Not Configured'}
-- Research APIs: Active (Semantic Scholar, arXiv, CrossRef)
-"""
-            base_response += endpoint_addition
-        
-    except Exception as e:
-        logger.warning(f"Could not enhance response with platform data: {e}")
-    
-    return base_response
-
-@app.get("/chat/platform-info")
-async def get_chatbot_platform_info(current_user=Depends(get_optional_current_user)):
-    """
-    Get comprehensive platform information for the chatbot system
-    """
-    try:
-        # Real platform statistics
-        stats = {
-            "total_users": users_collection.count_documents({}),
-            "total_ideas": ideas_collection.count_documents({}),
-            "total_roadmaps": roadmaps_collection.count_documents({}), 
-            "total_research": research_collection.count_documents({}),
-            "system_status": {
-                "database": "connected",
-                "groq_ai": "configured" if GROQ_API_KEY else "not_configured",
-                "research_apis": "active"
-            }
-        }
-        
-        # User-specific data if authenticated
-        user_data = None
-        if current_user:
-            user_id = str(current_user["_id"])
-            user_data = {
-                "user_stats": get_user_stats(user_id),
-                "profile_exists": get_user_profile(user_id) is not None,
-                "member_since": current_user.get("created_at")
-            }
-        
-        # Available features with real implementation status
-        features = {
-            "idea_validation": {
-                "active": GROQ_API_KEY is not None,
-                "endpoint": "/validate-idea",
-                "description": "AI-powered comprehensive startup idea validation"
-            },
-            "research_papers": {
-                "active": True,
-                "endpoint": "/research-papers", 
-                "description": "Multi-source academic research compilation"
-            },
-            "roadmap_generation": {
-                "active": GROQ_API_KEY is not None,
-                "endpoint": "/generate-roadmap",
-                "description": "Strategic roadmap generation with phase planning"
-            },
-            "user_management": {
-                "active": True,
-                "endpoints": ["/register", "/login", "/profile"],
-                "description": "Secure user accounts with GDPR compliance"
-            }
-        }
-        
-        return {
-            "platform_stats": stats,
-            "user_data": user_data,
-            "features": features,
-            "chatbot_capabilities": [
-                "Comprehensive platform feature explanations",
-                "Real-time data integration",
-                "User-specific information",
-                "Technical implementation details",
-                "API documentation and examples"
-            ],
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error getting platform info: {e}")
-        return {
-            "error": "Could not retrieve platform information",
-            "basic_features": [
-                "AI idea validation", 
-                "Academic research search",
-                "Strategic roadmap generation",
-                "User account management"
-            ]
-        }
-
-# Health check for chatbot system
-@app.get("/health/chatbot")
-async def chatbot_health_check():
-    """Health check specifically for the enhanced chatbot system"""
-    try:
-        # Test enhanced chatbot initialization
-        test_response = enhanced_chatbot_system.get_comprehensive_response("test")
-        
-        return {
-            "status": "healthy",
-            "chatbot_system": "enhanced_startup_gps_ai",
-            "capabilities": {
-                "platform_knowledge": "comprehensive",
-                "real_data_integration": True,
-                "user_context_aware": True,
-                "feature_explanations": "detailed"
-            },
-            "components": {
-                "enhanced_chatbot": "active",
-                "groq_integration": "configured" if GROQ_API_KEY else "missing_api_key",
-                "database_integration": "connected",
-                "platform_data_access": "active"
-            },
-            "test_response_length": len(test_response.get("response", "")),
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "fallback_available": True,
-            "basic_functionality": "available"
-        }
-
-# Optional: Add conversation history tracking
-@app.post("/chat/session")
-async def create_chat_session(current_user=Depends(get_optional_current_user)):
-    """Create a new chat session with context tracking"""
-    session_id = str(uuid.uuid4())
-    
-    # Initialize with welcome message that explains all platform capabilities
-    welcome_message = """Welcome to Startup GPS! I'm your comprehensive AI assistant that can explain every aspect of our platform in detail.
-
-**I can provide complete explanations about:**
-
-🤖 **AI-Powered Idea Validation**
-- How our 6-dimension scoring system works
-- Real competitor analysis and identification
-- Technical implementation using GROQ AI
-- Data structures and response formats
-
-📚 **Academic Research Integration** 
-- Multi-source search across 10M+ papers
-- Semantic Scholar, arXiv, and CrossRef APIs
-- Smart deduplication and relevance ranking
-- Concurrent async processing architecture
-
-🗺️ **Strategic Roadmap Generation**
-- Phase-by-phase planning methodology  
-- Timeframe-specific optimization
-- Team and resource allocation
-- Challenge identification and mitigation
-
-👥 **User Management System**
-- Secure JWT authentication
-- GDPR-compliant data handling
-- Profile management and activity tracking
-- Complete data export capabilities
-
-🛠️ **Technical Architecture**
-- FastAPI REST API implementation
-- MongoDB database schema
-- Security measures and error handling
-- Integration examples and documentation
-
-Just ask me about any feature and I'll provide comprehensive technical details, usage examples, and implementation insights directly from our platform!"""
-
-    return {
-        "session_id": session_id,
-        "welcome_message": welcome_message,
-        "user_authenticated": current_user is not None,
-        "available_features": [
-            "Detailed idea validation explanation",
-            "Research paper system architecture", 
-            "Roadmap generation process",
-            "User management features",
-            "Technical API documentation",
-            "Real-time platform statistics"
-        ],
-        "suggested_queries": [
-            "How does idea validation work exactly?",
-            "Explain the research paper search system",
-            "Show me the roadmap generation process", 
-            "Tell me about user accounts and security",
-            "What technical APIs are available?",
-            "Give me the complete platform overview"
-        ]
-    }
-
-# Add this function to your existing route handlers section
-@app.get("/chat/examples")
-async def get_chatbot_examples():
-    """Get example conversations showing chatbot capabilities"""
-    return {
-        "examples": [
-            {
-                "query": "How does idea validation work?",
-                "response_type": "Comprehensive technical explanation",
-                "includes": [
-                    "6-dimension scoring breakdown",
-                    "AI model implementation details",
-                    "Competitor analysis methodology", 
-                    "Data structure specifications",
-                    "Usage examples with code"
-                ]
-            },
-            {
-                "query": "Explain the research paper feature", 
-                "response_type": "Multi-source integration details",
-                "includes": [
-                    "Database sources and API endpoints",
-                    "Async processing architecture",
-                    "Deduplication algorithms",
-                    "Search term generation process",
-                    "Response parsing and curation"
-                ]
-            },
-            {
-                "query": "Tell me about roadmap generation",
-                "response_type": "Strategic planning system overview", 
-                "includes": [
-                    "Phase-by-phase methodology",
-                    "Timeframe optimization strategies",
-                    "AI prompt engineering approach",
-                    "Database persistence handling",
-                    "Fallback and error recovery"
-                ]
-            },
-            {
-                "query": "What is Startup GPS?",
-                "response_type": "Complete platform overview",
-                "includes": [
-                    "All feature explanations",
-                    "Technical architecture details", 
-                    "Real usage statistics",
-                    "User management capabilities",
-                    "Developer integration guide"
-                ]
-            }
-        ],
-        "capabilities": [
-            "Pulls real data from your main.py implementation",
-            "Explains technical implementation details", 
-            "Provides usage examples and code snippets",
-            "Shows current system status and statistics",
-            "Adapts responses based on user authentication",
-            "Includes follow-up suggestions for deeper exploration"
-        ]
-    }
-
-# Usage instructions for integration
-"""
-INTEGRATION INSTRUCTIONS:
-
-1. Add the enhanced_chatbot_integration.py file to your project directory
-
-2. Add these imports at the top of your main.py:
-   from enhanced_chatbot_integration import StartupGPSChatbotEnhanced
-
-3. Initialize the enhanced chatbot after your app creation:
-   enhanced_chatbot_system = StartupGPSChatbotEnhanced(GROQ_API_KEY)
-
-4. Add all the endpoint functions above to your main.py
-
-5. Test the integration:
-   - Start your server: uvicorn main:app --reload
-   - Test the chatbot: POST http://localhost:8000/chat
-   - Check health: GET http://localhost:8000/health/chatbot
-   - Get platform info: GET http://localhost:8000/chat/platform-info
-
-6. Update your frontend Help.tsx to use the new /chat endpoint
-
-The enhanced chatbot will now:
-- Provide comprehensive explanations of all your platform features
-- Use real data from your database and APIs
-- Explain technical implementation details
-- Show usage examples and code snippets
-- Adapt responses based on user authentication
-- Include current system status and statistics
-
-Example chat queries that will work:
-- "What is Startup GPS and what can it do?"
-- "How does idea validation work exactly?" 
-- "Explain the research paper system in detail"
-- "Tell me about roadmap generation"
-- "Show me the technical API architecture"
-- "What are all your features and capabilities?"
-"""
-
-@app.get("/debug/check-collections")
-async def check_collections(current_user=Depends(get_current_user)):
-    """Debug endpoint to check what's in the database collections"""
-    try:
-        user_id = str(current_user["_id"])
-        user_obj_id = ObjectId(user_id)
-        
-        # Check ideas collection
-        user_ideas = list(ideas_collection.find({"user_id": user_obj_id}).limit(5))
-        for idea in user_ideas:
-            idea["_id"] = str(idea["_id"])
-            idea["user_id"] = str(idea["user_id"])
-        
-        # Check roadmaps collection  
-        user_roadmaps = list(roadmaps_collection.find({"user_id": user_obj_id}).limit(5))
-        for roadmap in user_roadmaps:
-            roadmap["_id"] = str(roadmap["_id"])
-            roadmap["user_id"] = str(roadmap["user_id"])
-        
-        # Check total counts
-        total_ideas = ideas_collection.count_documents({})
-        total_roadmaps = roadmaps_collection.count_documents({})
-        user_ideas_count = ideas_collection.count_documents({"user_id": user_obj_id})
-        user_roadmaps_count = roadmaps_collection.count_documents({"user_id": user_obj_id})
-        
-        return {
-            "user_info": {
-                "user_id": user_id,
-                "email": current_user.get("email"),
-                "name": current_user.get("name")
-            },
-            "collections_status": {
-                "total_ideas": total_ideas,
-                "total_roadmaps": total_roadmaps,
-                "user_ideas_count": user_ideas_count,
-                "user_roadmaps_count": user_roadmaps_count
-            },
-            "recent_user_data": {
-                "ideas": user_ideas,
-                "roadmaps": user_roadmaps
-            }
-        }
-        
-    except Exception as e:
-        return {
-            "error": str(e),
-            "user_id": str(current_user["_id"]) if current_user else None
-        }
-    
 
 
 @app.post("/api/team-search")
 async def search_team_members(search_input: TeamSearchInput, current_user=Depends(get_current_user)):
-    """Search for team members based on requirements"""
+    """Search for team members based on requirements with minimum 30% match threshold"""
     try:
         user_id = str(current_user["_id"])
+        
+        # Validate that at least required_skills are provided
+        if not search_input.required_skills or len(search_input.required_skills) == 0:
+            raise HTTPException(
+                status_code=400, 
+                detail="At least one required skill must be specified"
+            )
         
         # Get all profiles except current user
         query = {"user_id": {"$ne": ObjectId(user_id)}}
@@ -2686,9 +2305,12 @@ async def search_team_members(search_input: TeamSearchInput, current_user=Depend
         
         for profile in profiles_cursor:
             # Calculate match score
-            match_score, matched_skills, matched_interests = calculate_match_score_and_details(profile, search_input.dict())
+            match_score, matched_skills, matched_interests = calculate_match_score_and_details(
+                profile, 
+                search_input.dict()
+            )
             
-            # Only include profiles with decent match scores
+            # STRICT FILTER: Only include profiles with >= 30% match
             if match_score >= 30:
                 # Get user details
                 user = users_collection.find_one({"_id": profile["user_id"]})
@@ -2715,11 +2337,18 @@ async def search_team_members(search_input: TeamSearchInput, current_user=Depend
                     }
                     matched_profiles.append(matched_profile)
         
-        # Sort by match score
+        # Sort by match score (highest first)
         matched_profiles.sort(key=lambda x: x["match_score"], reverse=True)
         
-        return {"profiles": matched_profiles[:20], "total": len(matched_profiles)}
+        # Return top 20 matches
+        return {
+            "profiles": matched_profiles[:20], 
+            "total": len(matched_profiles),
+            "search_criteria": search_input.dict()
+        }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Team search failed: {e}")
         raise HTTPException(status_code=500, detail="Search failed")
@@ -2878,7 +2507,102 @@ async def disconnect_user(target_user_id: str, current_user=Depends(get_current_
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail="Disconnect failed")
+# Add this right after the existing endpoints and BEFORE the if __name__ == "__main__": block
+
+# ==============================================
+# CHATBOT ENDPOINTS SETUP (FIXED)
+# ==============================================
+
+chatbot = get_chatbot_instance()
+
+# Replace existing chat endpoints with:
+@app.post("/chat/message", response_model=ChatResponse)
+async def chat_message(
+    message_data: ChatMessage,
+    current_user=Depends(get_optional_current_user)
+):
+    user_id = str(current_user["_id"]) if current_user else None
+    
+    result = await chatbot.process_message(
+        message_data.message,
+        message_data.session_id or str(uuid.uuid4()),
+        user_id
+    )
+    
+    return ChatResponse(
+        reply=result["reply"],
+        intent=result["intent"],
+        confidence=result["confidence"],
+        data=result.get("data"),
+        follow_ups=result.get("follow_ups", []),
+        session_id=message_data.session_id or str(uuid.uuid4())
+    )
+
+# Keep the welcome endpoint as is
+@app.get("/chat/welcome")
+async def get_welcome_data(current_user=Depends(get_optional_current_user)):
+    """Get welcome screen data with user stats"""
+    try:
+        if current_user:
+            user_id = str(current_user["_id"])
+            activity = await chatbot.get_user_activity(user_id)  # ✅ CORRECT
+            
+            return {
+                "user": {
+                    "name": current_user.get("name", "User"),
+                    "email": current_user.get("email"),
+                    "authenticated": True
+                },
+                "stats": activity.get("stats", {}),
+                "features": [
+                    {"id": "ideas", "name": "Idea Validation", "icon": "lightbulb"},
+                    {"id": "research", "name": "Research Finder", "icon": "book"},
+                    {"id": "roadmaps", "name": "Roadmap Generator", "icon": "map"},
+                    {"id": "team", "name": "Team Builder", "icon": "users"}
+                ]
+            }
+        else:
+            return {
+                "user": {
+                    "name": "Guest",
+                    "authenticated": False
+                },
+                "stats": {"ideas": 0, "roadmaps": 0, "research": 0},
+                "features": [
+                    {"id": "ideas", "name": "Idea Validation", "icon": "lightbulb"},
+                    {"id": "research", "name": "Research Finder", "icon": "book"},
+                    {"id": "roadmaps", "name": "Roadmap Generator", "icon": "map"},
+                    {"id": "team", "name": "Team Builder", "icon": "users"}
+                ]
+            }
+    except Exception as e:
+        logger.error(f"Welcome data error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load welcome data")
+
+
+# ==============================================
+# APPLICATION STARTUP
+# ==============================================
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+    # Print startup info
+    print("\n" + "="*60)
+    print("🚀 STARTUP GPS API SERVER")
+    print("="*60)
+    print(f"📍 Server URL: http://localhost:8000")
+    print(f"📖 API Docs: http://localhost:8000/docs")
+    print(f"🔧 Health Check: http://localhost:8000/health")
+    
+    if chatbot_instance:
+        print("🤖 Chatbot Status: ✅ ACTIVE")
+        print("💬 Chat Health: http://localhost:8000/chat/health")
+    else:
+        print("🤖 Chatbot Status: ❌ DISABLED")
+    
+    print("="*60)
+    print("✅ All systems ready! Starting server...")
+    print("="*60 + "\n")
+    
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

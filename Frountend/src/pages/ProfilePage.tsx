@@ -111,35 +111,36 @@ const Profile = () => {
           onSubmit={(e) => { e.preventDefault(); handleSave(); }}
           className="space-y-5"
         >
-          {/* Full Name */}
-          <div>
-            <label className="block text-sm text-gray-300 mb-1">Full Name</label>
-            <input 
-              type="text" 
-              name="name" 
-              value={formData.name}
-              onChange={handleChange}
-              required 
-              disabled={!isEditing}
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
-            />
+          {/* Row 1: Full Name and Email */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">Full Name</label>
+              <input 
+                type="text" 
+                name="name" 
+                value={formData.name}
+                onChange={handleChange}
+                required 
+                disabled={!isEditing}
+                className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">Email</label>
+              <input 
+                type="email" 
+                name="email" 
+                value={formData.email}
+                onChange={handleChange}
+                required 
+                disabled={!isEditing}
+                className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
+              />
+            </div>
           </div>
 
-          {/* Email */}
-          <div>
-            <label className="block text-sm text-gray-300 mb-1">Email</label>
-            <input 
-              type="email" 
-              name="email" 
-              value={formData.email}
-              onChange={handleChange}
-              required 
-              disabled={!isEditing}
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
-            />
-          </div>
-
-          {/* Current Role/Title */}
+          {/* Row 2: Current Role - Full Width */}
           <div>
             <label className="block text-sm text-gray-300 mb-1">Current Role / Title</label>
             <input 
@@ -153,7 +154,7 @@ const Profile = () => {
             />
           </div>
 
-          {/* Skills */}
+          {/* Row 3: Skills - Full Width */}
           <div>
             <label className="block text-sm text-gray-300 mb-1">Primary Technical / Business Skills</label>
             <input 
@@ -168,7 +169,7 @@ const Profile = () => {
             <p className="text-xs text-gray-400 mt-1">Use comma-separated values</p>
           </div>
 
-          {/* Areas of Interest */}
+          {/* Row 4: Areas of Interest - Full Width */}
           <div>
             <label className="block text-sm text-gray-300 mb-1">Area(s) of Interest</label>
             <input 
@@ -183,65 +184,67 @@ const Profile = () => {
             <p className="text-xs text-gray-400 mt-1">Use comma-separated values</p>
           </div>
 
-          {/* Preferred Role in Startup - Changed to text input */}
-          <div>
-            <label className="block text-sm text-gray-300 mb-1">Preferred Role in Startup</label>
-            <input 
-              type="text" 
-              name="preferred_role" 
-              value={formData.preferred_role}
-              onChange={handleChange}
-              placeholder="e.g. Developer, Product Manager, etc." 
-              disabled={!isEditing}
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
-            />
+          {/* Row 5: Preferred Role and Experience Level */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">Preferred Role in Startup</label>
+              <input 
+                type="text" 
+                name="preferred_role" 
+                value={formData.preferred_role}
+                onChange={handleChange}
+                placeholder="e.g. Developer, Product Manager, etc." 
+                disabled={!isEditing}
+                className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">Experience Level</label>
+              <select 
+                name="experience" 
+                value={formData.experience}
+                onChange={handleChange}
+                disabled={!isEditing}
+                className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
+              >
+                <option value="">Select</option>
+                <option>Junior</option>
+                <option>Mid</option>
+                <option>Senior</option>
+              </select>
+            </div>
           </div>
 
-          {/* Experience Level */}
-          <div>
-            <label className="block text-sm text-gray-300 mb-1">Experience Level</label>
-            <select 
-              name="experience" 
-              value={formData.experience}
-              onChange={handleChange}
-              disabled={!isEditing}
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
-            >
-              <option value="">Select</option>
-              <option>Junior</option>
-              <option>Mid</option>
-              <option>Senior</option>
-            </select>
-          </div>
+          {/* Row 6: Availability and Location */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">Availability</label>
+              <select 
+                name="availability" 
+                value={formData.availability}
+                onChange={handleChange}
+                disabled={!isEditing}
+                className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
+              >
+                <option value="">Select</option>
+                <option>Part Time</option>
+                <option>Full Time</option>
+              </select>
+            </div>
 
-          {/* Availability - Changed to dropdown with Part Time/Full Time */}
-          <div>
-            <label className="block text-sm text-gray-300 mb-1">Availability</label>
-            <select 
-              name="availability" 
-              value={formData.availability}
-              onChange={handleChange}
-              disabled={!isEditing}
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
-            >
-              <option value="">Select</option>
-              <option>Part Time</option>
-              <option>Full Time</option>
-            </select>
-          </div>
-
-          {/* Location / Timezone */}
-          <div>
-            <label className="block text-sm text-gray-300 mb-1">Location / Timezone</label>
-            <input 
-              type="text" 
-              name="location" 
-              value={formData.location}
-              onChange={handleChange}
-              placeholder="e.g. Bangalore, IST / UTC+5:30" 
-              disabled={!isEditing}
-              className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
-            />
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">Location / Timezone</label>
+              <input 
+                type="text" 
+                name="location" 
+                value={formData.location}
+                onChange={handleChange}
+                placeholder="e.g. Bangalore, IST / UTC+5:30" 
+                disabled={!isEditing}
+                className="w-full px-4 py-2 rounded-lg bg-[#0f172a] border border-gray-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
+              />
+            </div>
           </div>
 
           {/* Buttons */}

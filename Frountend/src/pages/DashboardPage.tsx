@@ -24,7 +24,6 @@ interface User {
   created_at: string;
   profile_data?: ProfileData;
   validation_history?: ValidationItem[];
-  status?: 'Active' | 'Inactive';
   role?: string;
   roadmaps_count?: number;
   researches_count?: number;
@@ -50,19 +49,15 @@ interface ApiResponse {
 interface StatsCardProps {
   title: string;
   value: number;
-  percent: string;
-  icon: React.ReactNode;
 }
 
-function StatsCard({ title, value, percent, icon }: StatsCardProps) {
+function StatsCard({ title, value }: StatsCardProps) {
   return (
     <div className="bg-gray-800 rounded-lg p-6 flex items-center justify-between shadow hover:shadow-xl transition">
       <div className="flex-1">
         <div className="text-gray-400 text-sm mb-1">{title}</div>
-        <div className="text-3xl font-bold text-white mb-1">{value.toLocaleString()}</div>
-        <div className="text-sm text-green-400">+{percent}%</div>
+        <div className="text-3xl font-bold text-white">{value.toLocaleString()}</div>
       </div>
-      <div className="text-4xl text-blue-500 ml-4">{icon}</div>
     </div>
   );
 }
@@ -78,47 +73,9 @@ function UserCard({ user, expanded, onExpand }: UserCardProps) {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
 
-  const getRoleBadge = (user: User) => {
-    let role = user.profile_data?.preferred_role || user.role;
-    
-    if (!role && user.profile_data?.experience) {
-      const exp = user.profile_data.experience.toLowerCase();
-      if (exp.includes('ceo')) role = 'CEO';
-      else if (exp.includes('founder')) role = 'Founder';
-      else if (exp.includes('product') && exp.includes('manager')) role = 'Product Manager';
-      else if (exp.includes('developer') || exp.includes('engineer')) role = 'Developer';
-      else if (exp.includes('designer')) role = 'Designer';
-      else role = 'User';
-    }
-    
-    if (!role) role = 'User';
-    
-    const roleColors: { [key: string]: string } = {
-      'Founder': 'bg-blue-600',
-      'CEO': 'bg-blue-600',
-      'Product Manager': 'bg-purple-600',
-      'Developer': 'bg-green-600',
-      'Designer': 'bg-pink-600',
-      'User': 'bg-gray-600'
-    };
-
-    return (
-      <span className={`${roleColors[role] || 'bg-gray-600'} text-white rounded px-2 py-1 text-xs font-medium`}>
-        {role}
-      </span>
-    );
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-GB');
   };
-
-  // Debug logging
-  console.log(`User ${user.name} activity counts:`, {
-    roadmaps: user.roadmaps_count,
-    researches: user.researches_count,
-    ideas: user.ideas_count || user.validation_history?.length || 0
-  });
 
   return (
     <div className="border border-gray-700 rounded-lg overflow-hidden bg-gray-800 mb-3">
@@ -136,13 +93,8 @@ function UserCard({ user, expanded, onExpand }: UserCardProps) {
           </div>
         </div>
         <div className="flex items-center space-x-3">
-          {getRoleBadge(user)}
           <div className="text-right">
             <div className="text-sm text-white">{formatDate(user.created_at)}</div>
-            <div className="flex items-center space-x-1">
-              <span className={`w-2 h-2 rounded-full ${user.status === 'Active' ? 'bg-green-400' : 'bg-gray-500'}`}></span>
-              <span className="text-xs text-gray-400">{user.status || 'Active'}</span>
-            </div>
           </div>
           <svg
             className={`h-5 w-5 text-gray-400 transform transition-transform ${expanded ? 'rotate-180' : ''}`}
@@ -155,114 +107,127 @@ function UserCard({ user, expanded, onExpand }: UserCardProps) {
       </div>
 
       {expanded && (
-        <div className="px-4 pb-4 bg-gray-850 border-t border-gray-700">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-            <div>
-              <h4 className="text-gray-400 uppercase text-xs font-semibold mb-2">CONTACT</h4>
-              <p className="text-white mb-1">{user.email}</p>
-              <p className="text-gray-400">{user.profile_data?.location || "Location not specified"}</p>
-            </div>
-
-            <div>
-              <h4 className="text-gray-400 uppercase text-xs font-semibold mb-2">ROLE & STATUS</h4>
-              <div className="flex items-center space-x-2 mb-1">
-                {getRoleBadge(user)}
-                <div className="flex items-center space-x-1">
-                  <span className={`w-2 h-2 rounded-full ${user.status === 'Active' ? 'bg-green-400' : 'bg-gray-500'}`}></span>
-                  <span className="text-white text-sm">{user.status || 'Active'}</span>
-                </div>
-              </div>
-              <p className="text-gray-400 text-sm">Joined: {formatDate(user.created_at)}</p>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <h4 className="text-gray-400 uppercase text-xs font-semibold mb-2">PREFERRED ROLE</h4>
-            <p className="text-white">
-              {user.profile_data?.preferred_role || 
-               (user.profile_data?.experience?.toLowerCase().includes('ceo') ? 'CEO' :
-                user.profile_data?.experience?.toLowerCase().includes('founder') ? 'Founder' :
-                user.profile_data?.experience?.toLowerCase().includes('product') ? 'Product Manager' :
-                user.profile_data?.experience?.toLowerCase().includes('developer') ? 'Developer' :
-                "Not specified")}
-            </p>
-          </div>
-
-          <div className="mt-4">
-            <h4 className="text-gray-400 uppercase text-xs font-semibold mb-2">EXPERIENCE</h4>
-            <p className="text-white">{user.profile_data?.experience || "Not specified"}</p>
-          </div>
-
-          <div className="mt-4">
-            <h4 className="text-gray-400 uppercase text-xs font-semibold mb-2">AVAILABILITY</h4>
-            <p className="text-white">{user.profile_data?.availability || "Not specified"}</p>
-          </div>
-
-          <div className="mt-4">
-            <h4 className="text-gray-400 uppercase text-xs font-semibold mb-3">ACTIVITY METRICS</h4>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-gray-900 rounded-lg p-3 text-center">
-                <div className="flex items-center justify-center mb-1">
-                  <svg className="w-4 h-4 text-green-400 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+        <div className="px-4 pb-4 bg-slate-800 border-t border-gray-700">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-4">
+            {/* Left Column */}
+            <div className="space-y-4">
+              {/* Contact Information */}
+              <div className="bg-gray-700 bg-opacity-50 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <svg className="w-4 h-4 text-blue-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z" clipRule="evenodd" />
                   </svg>
-                  <span className="font-bold text-2xl text-white">
-                    {user.ideas_count ?? user.validation_history?.length ?? 0}
-                  </span>
+                  <h4 className="text-blue-400 text-sm">Contact Information</h4>
                 </div>
-                <div className="text-xs text-gray-400">Ideas Validated</div>
+                <div className="space-y-2">
+                  <div>
+                    <div className="text-gray-400 text-xs">Email:</div>
+                    <div className="text-white text-sm">{user.email}</div>
+                  </div>
+                  <div className="flex items-center">
+                    <svg className="w-3 h-3 text-gray-400 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-white text-sm">{user.profile_data?.location || "Location not specified"}</span>
+                  </div>
+                </div>
               </div>
-              <div className="bg-gray-900 rounded-lg p-3 text-center">
-                <div className="flex items-center justify-center mb-1">
-                  <svg className="w-4 h-4 text-blue-400 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd" />
-                    <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 102 0V3h4v1a1 1 0 102 0V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm8 8a1 1 0 100-2H8a1 1 0 100 2h4z" clipRule="evenodd" />
+
+              {/* Professional Details */}
+              <div className="bg-gray-700 bg-opacity-50 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <svg className="w-4 h-4 text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M6 6V5a3 3 0 013-3h2a3 3 0 013 3v1h2a2 2 0 012 2v3.57A22.952 22.952 0 0110 13a22.95 22.95 0 01-8-1.43V8a2 2 0 012-2h2zm2-1a1 1 0 011-1h2a1 1 0 011 1v1H8V5zm1 5a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" />
+                    <path d="M2 13.692V16a2 2 0 002 2h12a2 2 0 002-2v-2.308A24.974 24.974 0 0110 15c-2.796 0-5.487-.46-8-1.308z" />
                   </svg>
-                  <span className="font-bold text-2xl text-white">
-                    {user.roadmaps_count ?? 0}
-                  </span>
+                  <h4 className="text-green-400 text-sm">Professional Details</h4>
                 </div>
-                <div className="text-xs text-gray-400">Roadmaps Generated</div>
+                <div className="space-y-2">
+                  <div>
+                    <div className="text-gray-400 text-xs">Preferred Role:</div>
+                    <div className="text-white text-sm font-medium">
+                      {user.profile_data?.preferred_role || 
+                       (user.profile_data?.experience?.toLowerCase().includes('ceo') ? 'CEO' :
+                        user.profile_data?.experience?.toLowerCase().includes('founder') ? 'Founder' :
+                        user.profile_data?.experience?.toLowerCase().includes('product') ? 'Product Manager' :
+                        user.profile_data?.experience?.toLowerCase().includes('developer') ? 'Developer' :
+                        user.profile_data?.experience?.toLowerCase().includes('designer') ? 'designer' :
+                        "Not specified")}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs">Experience:</div>
+                    <div className="text-white text-sm">{user.profile_data?.experience || "Not specified"}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs">Availability:</div>
+                    <div className="text-white text-sm">{user.profile_data?.availability || "Not specified"}</div>
+                  </div>
+                </div>
               </div>
-              <div className="bg-gray-900 rounded-lg p-3 text-center">
-                <div className="flex items-center justify-center mb-1">
-                  <svg className="w-4 h-4 text-purple-400 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+            </div>
+
+            {/* Right Column */}
+            <div className="space-y-4">
+              {/* Activity Overview */}
+              <div className="bg-gray-700 bg-opacity-50 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <svg className="w-4 h-4 text-blue-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
-                  <span className="font-bold text-2xl text-white">
-                    {user.researches_count ?? 0}
-                  </span>
+                  <h4 className="text-blue-400 text-sm">Activity Overview</h4>
                 </div>
-                <div className="text-xs text-gray-400">Researches Conducted</div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-green-500 bg-opacity-10 border border-green-500 border-opacity-30 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-green-400 mb-1">
+                      {user.ideas_count ?? user.validation_history?.length ?? 0}
+                    </div>
+                    <div className="text-xs text-green-300">Ideas</div>
+                  </div>
+                  <div className="bg-blue-500 bg-opacity-10 border border-blue-500 border-opacity-30 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-blue-400 mb-1">
+                      {user.roadmaps_count ?? 0}
+                    </div>
+                    <div className="text-xs text-blue-300">Roadmaps</div>
+                  </div>
+                  <div className="bg-purple-500 bg-opacity-10 border border-purple-500 border-opacity-30 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-purple-400 mb-1">
+                      {user.researches_count ?? 0}
+                    </div>
+                    <div className="text-xs text-purple-300">Research</div>
+                  </div>
+                </div>
               </div>
+
+              {/* Skills */}
+              {user.profile_data?.skills && user.profile_data.skills.length > 0 && (
+                <div className="bg-gray-700 bg-opacity-50 rounded-lg p-4">
+                  <h4 className="text-blue-400 text-sm mb-3">Skills</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {user.profile_data.skills.map((skill, idx) => (
+                      <span key={idx} className="bg-blue-500 text-white rounded-full px-3 py-1 text-xs">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Interests */}
+              {user.profile_data?.interests && user.profile_data.interests.length > 0 && (
+                <div className="bg-gray-700 bg-opacity-50 rounded-lg p-4">
+                  <h4 className="text-pink-400 text-sm mb-3">Interests</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {user.profile_data.interests.map((interest, idx) => (
+                      <span key={idx} className="bg-pink-500 text-white rounded-full px-3 py-1 text-xs">
+                        {interest}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-
-          {user.profile_data?.skills && user.profile_data.skills.length > 0 && (
-            <div className="mt-4">
-              <h4 className="text-gray-400 uppercase text-xs font-semibold mb-2">SKILLS</h4>
-              <div className="flex flex-wrap gap-2">
-                {user.profile_data.skills.map((skill, idx) => (
-                  <span key={idx} className="bg-gray-700 rounded px-3 py-1 text-xs text-white">
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {user.profile_data?.interests && user.profile_data.interests.length > 0 && (
-            <div className="mt-4">
-              <h4 className="text-gray-400 uppercase text-xs font-semibold mb-2">INTERESTS</h4>
-              <div className="flex flex-wrap gap-2">
-                {user.profile_data.interests.map((interest, idx) => (
-                  <span key={idx} className="bg-gray-700 rounded px-3 py-1 text-xs text-white">
-                    {interest}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -277,7 +242,6 @@ const DashboardPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRole, setSelectedRole] = useState('All Roles');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -291,7 +255,6 @@ const DashboardPage: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        console.log('Fetching dashboard data...');
         const response = await fetch('http://localhost:8000/dashboard-data', {
           headers: { 
             'Authorization': `Bearer ${token}`,
@@ -309,21 +272,11 @@ const DashboardPage: React.FC = () => {
         }
         
         const result: ApiResponse = await response.json();
-        console.log('Dashboard API Response:', result);
-        
-        if (result.users && result.users.length > 0) {
-          console.log('Users received:', result.users.length);
-          console.log('First user data:', result.users[0]);
-          console.log('First user roadmap count:', result.users[0].roadmaps_count);
-          console.log('First user research count:', result.users[0].researches_count);
-        }
-        
         setStats(result.stats || null);
         setUsers(result.users || []);
         setFilteredUsers(result.users || []);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error occurred';
-        console.error('Dashboard fetch error:', err);
         setError(message);
       } finally {
         setLoading(false);
@@ -343,25 +296,8 @@ const DashboardPage: React.FC = () => {
       );
     }
 
-    if (selectedRole !== 'All Roles') {
-      filtered = filtered.filter(user => {
-        const userRole = user.profile_data?.preferred_role || user.role;
-        let derivedRole = userRole;
-        if (!derivedRole && user.profile_data?.experience) {
-          const exp = user.profile_data.experience.toLowerCase();
-          if (exp.includes('ceo')) derivedRole = 'CEO';
-          else if (exp.includes('founder')) derivedRole = 'Founder';
-          else if (exp.includes('product') && exp.includes('manager')) derivedRole = 'Product Manager';
-          else if (exp.includes('developer') || exp.includes('engineer')) derivedRole = 'Developer';
-          else if (exp.includes('designer')) derivedRole = 'Designer';
-          else derivedRole = 'User';
-        }
-        return derivedRole === selectedRole;
-      });
-    }
-
     setFilteredUsers(filtered);
-  }, [users, searchTerm, selectedRole]);
+  }, [users, searchTerm]);
 
   const toggleExpandUser = (userId: string) => {
     setExpandedUser(expandedUser === userId ? null : userId);
@@ -371,8 +307,6 @@ const DashboardPage: React.FC = () => {
     localStorage.removeItem('token');
     window.location.href = '/signin';
   };
-
-  const roles = ['All Roles', 'Founder', 'CEO', 'Product Manager', 'Developer', 'Designer', 'User'];
 
   if (loading) return (
     <div className="min-h-screen flex justify-center items-center bg-gray-900">
@@ -432,30 +366,10 @@ const DashboardPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           {stats ? (
             <>
-              <StatsCard
-                title="Total Users"
-                value={stats.total_users}
-                percent={stats.total_users_change}
-                icon={<span>👥</span>}
-              />
-              <StatsCard
-                title="Ideas Validated"
-                value={stats.ideas_validated}
-                percent={stats.ideas_validated_change}
-                icon={<span>✅</span>}
-              />
-              <StatsCard
-                title="Roadmaps Generated"
-                value={stats.roadmaps_generated}
-                percent={stats.roadmaps_generated_change}
-                icon={<span>🗺️</span>}
-              />
-              <StatsCard
-                title="Researches Conducted"
-                value={stats.researches_conducted}
-                percent={stats.researches_conducted_change}
-                icon={<span>🔍</span>}
-              />
+              <StatsCard title="Total Users" value={stats.total_users} />
+              <StatsCard title="Ideas Validated" value={stats.ideas_validated} />
+              <StatsCard title="Roadmaps Generated" value={stats.roadmaps_generated} />
+              <StatsCard title="Researches Conducted" value={stats.researches_conducted} />
             </>
           ) : (
             <div className="col-span-4 text-center text-gray-400">
@@ -469,28 +383,17 @@ const DashboardPage: React.FC = () => {
           <div className="p-6">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-white">User Management</h2>
-              <div className="flex space-x-4">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search users..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 pl-10 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <svg className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value)}
-                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  {roles.map(role => (
-                    <option key={role} value={role}>{role}</option>
-                  ))}
-                </select>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search users..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 pl-10 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <svg className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                </svg>
               </div>
             </div>
             

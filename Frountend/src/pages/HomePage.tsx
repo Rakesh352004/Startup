@@ -20,7 +20,6 @@ import {
   Search,
   Sparkles,
   Compass,
-
   ChevronRight,
   Trophy
 } from "lucide-react";
@@ -49,8 +48,6 @@ interface StartupGPSLogoProps {
   size?: string;
 }
 
-
-
 // 3D Floating Card Component (without rotation)
 const FloatingCard: React.FC<FloatingCardProps> = ({ children, delay = 0, className = "" }) => (
   <div
@@ -62,8 +59,6 @@ const FloatingCard: React.FC<FloatingCardProps> = ({ children, delay = 0, classN
     {children}
   </div>
 );
-
-
 
 // Animated Background Orbs
 const BackgroundOrbs = () => (
@@ -135,29 +130,13 @@ export default function HomePage() {
     category: "",
     message: "",
   });
-  
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePosition({
-        x: (e.clientX / window.innerWidth) * 100,
-        y: (e.clientY / window.innerHeight) * 100,
-      });
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
 
   // Navigation handlers using react-router-dom
   const navigateToIdeaValidator = () => navigate("/idea-validation");
   const navigateToResearchAdvisor = () => navigate("/research-papers");
   const navigateToRoadmapGenerator = () => navigate("/roadmap");
-  const navigateToTeamBuilder = () => navigate("/team");
+  const navigateToTeamBuilder = () => navigate("/team-maker");
   const navigateToSuccess = () => navigate("/success");
-
-
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white overflow-hidden">
@@ -214,10 +193,6 @@ export default function HomePage() {
           animation: morphing 8s ease-in-out infinite, float 6s ease-in-out infinite;
         }
         
-        .parallax-bg {
-          transform: translate3d(${mousePosition.x * 0.02}px, ${mousePosition.y * 0.02}px, 0);
-        }
-        
         .shimmer {
           background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
           background-size: 200% 100%;
@@ -232,14 +207,10 @@ export default function HomePage() {
       {/* Animated Background Elements */}
       <BackgroundOrbs />
       <ParallaxStars />
-      
-      {/* Moving gradient background */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] [background-size:20px_20px] pointer-events-none parallax-bg"></div>
 
       <div className="relative z-10">
-        {/* Hero Section with 3D Elements */}
+        {/* Hero Section */}
         <section className="text-center px-6 max-w-6xl mx-auto py-24 relative overflow-visible">
-          {/* 3D Morphing Blobs */}
           <div className="absolute -top-32 -left-32 w-64 h-64 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 morphing-blob"></div>
           <div
             className="absolute -top-20 -right-20 w-48 h-48 bg-gradient-to-br from-purple-500/20 to-pink-500/20 morphing-blob"
@@ -483,19 +454,12 @@ export default function HomePage() {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {[
-              {
+            {[{
                 onClick: navigateToIdeaValidator,
                 icon: Lightbulb,
                 title: "Idea Validation",
-                description:
-                  "AI-powered research & scoring system to assess your startup idea's potential.",
-                features: [
-                  "Market analysis",
-                  "Competitor research",
-                  "Viability scoring",
-                  "Risk assessment",
-                ],
+                description: "AI-powered research & scoring system to assess your startup idea's potential.",
+                features: ["Market analysis","Competitor research","Viability scoring","Risk assessment"],
                 gradient: "from-yellow-500 to-orange-500",
                 borderClass: "hover:border-yellow-500/50",
               },
@@ -503,14 +467,8 @@ export default function HomePage() {
                 onClick: navigateToResearchAdvisor,
                 icon: BookOpen,
                 title: "Research Finder",
-                description:
-                  "Access 50M+ research papers and get AI-powered insights for data-driven decisions.",
-                features: [
-                  "Academic database access",
-                  "Expert analysis",
-                  "Trend identification",
-                  "Actionable insights",
-                ],
+                description: "Access 50M+ research papers and get AI-powered insights for data-driven decisions.",
+                features: ["Academic database access","Expert analysis","Trend identification","Actionable insights"],
                 gradient: "from-indigo-500 to-purple-500",
                 borderClass: "hover:border-indigo-500/50",
               },
@@ -519,12 +477,7 @@ export default function HomePage() {
                 icon: Map,
                 title: "Roadmap Generator",
                 description: "Get an actionable startup roadmap tailored to your specific goals and timeline.",
-                features: [
-                  "Milestone planning",
-                  "Resource allocation",
-                  "Timeline optimization",
-                  "Progress tracking",
-                ],
+                features: ["Milestone planning","Resource allocation","Timeline optimization","Progress tracking"],
                 gradient: "from-green-500 to-teal-500",
                 borderClass: "hover:border-green-500/50",
               },
@@ -532,17 +485,11 @@ export default function HomePage() {
                 onClick: navigateToTeamBuilder,
                 icon: Users,
                 title: "Team Building",
-                description:
-                  "Find the perfect team members based on skills, vision alignment, and cultural fit.",
-                features: [
-                  "Skill matching",
-                  "Vision alignment",
-                  "Cultural fit analysis",
-                  "Remote team support",
-                ],
+                description: "Find the perfect team members based on skills, vision alignment, and cultural fit.",
+                features: ["Skill matching","Vision alignment","Cultural fit analysis","Remote team support"],
                 gradient: "from-blue-500 to-purple-500",
                 borderClass: "hover:border-blue-500/50",
-              },
+              }
             ].map((feature, index) => (
               <FloatingCard key={index} delay={index * 0.3}>
                 <div
@@ -562,11 +509,9 @@ export default function HomePage() {
                       {feature.title}
                     </h3>
                   </div>
-
                   <p className="text-gray-300 mb-6 leading-relaxed group-hover:text-gray-200 transition-colors duration-300 relative z-10 text-center">
                     {feature.description}
                   </p>
-
                   <ul className="space-y-3 relative z-10">
                     {feature.features.map((item, idx) => (
                       <li key={idx} className="flex items-center group-hover:transform group-hover:translate-x-2 transition-transform duration-300" style={{transitionDelay: `${idx * 50}ms`}}>
@@ -597,66 +542,51 @@ export default function HomePage() {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[
-              {
+            {[{
                 icon: Brain,
                 title: "AI-Powered Intelligence",
-                description:
-                  "Leverage advanced machine learning algorithms to analyze market trends, validate ideas, and predict success patterns with 95% accuracy.",
+                description: "Leverage advanced machine learning algorithms to analyze market trends, validate ideas, and predict success patterns with 95% accuracy.",
                 gradient: "from-purple-500 to-indigo-500",
               },
               {
                 icon: Search,
                 title: "Precision Validation",
-                description:
-                  "Get detailed market analysis, competitor insights, and viability scoring to make informed decisions backed by real data.",
+                description: "Get detailed market analysis, competitor insights, and viability scoring to make informed decisions backed by real data.",
                 gradient: "from-blue-500 to-cyan-500",
               },
               {
                 icon: Zap,
                 title: "Lightning Fast Results",
-                description:
-                  "Receive comprehensive startup insights in minutes, not months of manual research and analysis.",
+                description: "Receive comprehensive startup insights in minutes, not months of manual research and analysis.",
                 gradient: "from-yellow-500 to-orange-500",
               },
               {
                 icon: Clock,
                 title: "Time-Optimized Planning",
-                description:
-                  "Generate realistic timelines and milestone tracking that adapts to your progress and available resources.",
+                description: "Generate realistic timelines and milestone tracking that adapts to your progress and available resources.",
                 gradient: "from-green-500 to-emerald-500",
               },
               {
                 icon: Shield,
                 title: "Risk Mitigation",
-                description:
-                  "Identify potential pitfalls early and get actionable recommendations to avoid common startup failures.",
+                description: "Identify potential pitfalls early and get actionable recommendations to avoid common startup failures.",
                 gradient: "from-red-500 to-pink-500",
               },
               {
                 icon: TrendingUp,
                 title: "Proven Methodology",
-                description:
-                  "Built on academic research and real-world startup data from 10,000+ successful ventures to maximize your chances of success.",
+                description: "Built on academic research and real-world startup data from 10,000+ successful ventures to maximize your chances of success.",
                 gradient: "from-indigo-500 to-purple-500",
-              },
+              }
             ].map((item, index) => (
               <FloatingCard key={index} delay={index * 0.2}>
                 <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm p-8 rounded-2xl border border-gray-700/50 hover:border-gray-600/50 transition-all duration-500 hover:transform hover:-translate-y-4 hover:shadow-2xl group transform-gpu relative overflow-hidden h-full">
                   <div className="absolute inset-0 shimmer opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  <div className="mb-6 relative z-10 flex justify-center">
-                    <Rotating3DIcon 
-                      Icon={item.icon} 
-                      gradient={item.gradient} 
-                      size="w-14 h-14"
-                    />
+                  <div className="flex flex-col items-center mb-6">
+                    <Rotating3DIcon Icon={item.icon} gradient={item.gradient} size="w-14 h-14" />
+                    <h3 className="text-2xl font-semibold text-white mt-4 text-center">{item.title}</h3>
                   </div>
-                  <h3 className="text-xl font-semibold text-white mb-4 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-cyan-200 group-hover:bg-clip-text transition-all duration-300 relative z-10 text-center">
-                    {item.title}
-                  </h3>
-                  <p className="text-gray-300 leading-relaxed group-hover:text-gray-200 transition-colors duration-300 relative z-10 text-center">
-                    {item.description}
-                  </p>
+                  <p className="text-gray-300 text-center">{item.description}</p>
                 </div>
               </FloatingCard>
             ))}

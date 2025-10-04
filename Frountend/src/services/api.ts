@@ -1,4 +1,4 @@
-// src/services/api.ts - Complete Updated Version with Team Finder Focus
+// src/services/api.ts - Updated with Fixed Chatbot Integration
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
 interface ApiResponse<T> {
@@ -59,6 +59,83 @@ class ApiService {
     }
   }
 
+  // ==============================================
+  // CHATBOT API METHODS (FIXED)
+  // ==============================================
+
+  // Create chat session
+  async createChatSession() {
+    return this.makeRequest<{ session_id: string; user_authenticated: boolean; timestamp: string }>("/chat/session", {
+      method: "POST",
+    });
+  }
+
+  // Send real-time chat message
+  async sendRealtimeMessage(messageData: {
+    message: string;
+    session_id?: string;
+    include_realtime_data?: boolean;
+    user_context?: any;
+    platform_context?: any;
+  }) {
+    return this.makeRequest<{
+      reply: string;
+      intent: string;
+      confidence: number;
+      realtime_data?: any;
+      follow_ups: string[];
+      session_id: string;
+      updated_user_stats?: any;
+      updated_platform_stats?: any;
+    }>("/chat/realtime", {
+      method: "POST",
+      body: JSON.stringify(messageData),
+    });
+  }
+
+  // Get platform information
+  async getPlatformInfo() {
+    return this.makeRequest<{
+      platform_stats: any;
+      user_data: any;
+      platform_knowledge: any;
+      available_intents: string[];
+      scope_keywords: string[];
+      system_status: any;
+      last_updated: string;
+    }>("/chat/platform-info");
+  }
+
+  // Submit feedback
+  async submitChatFeedback(feedbackData: {
+    session_id: string;
+    message: string;
+    response: string;
+    rating: number;
+    feedback_text?: string;
+    intent?: string;
+  }) {
+    return this.makeRequest<{ message: string }>("/chat/feedback", {
+      method: "POST",
+      body: JSON.stringify(feedbackData),
+    });
+  }
+
+  // Get chat health status
+  async getChatHealth() {
+    return this.makeRequest<{
+      status: string;
+      components: any;
+      statistics: any;
+      capabilities: any;
+      last_updated: string;
+    }>("/chat/health");
+  }
+
+  // ==============================================
+  // EXISTING API METHODS (Keep all your existing methods)
+  // ==============================================
+
   // Authentication Methods
   async login(credentials: LoginCredentials) {
     return this.makeRequest<LoginResponse>("/login", {
@@ -95,7 +172,7 @@ class ApiService {
 
   // Idea Validation
   async validateIdea(prompt: string) {
-    return this.makeRequest<ValidationResponse>("/validate-idea", {
+    return this.makeRequest<ValidationResponse>("/validate-idea-enhanced", {
       method: "POST",
       body: JSON.stringify({ prompt }),
     });
@@ -134,89 +211,85 @@ class ApiService {
     return this.makeRequest<UserActivityStats>("/user/activity");
   }
 
-  // ==============================================
-  // TEAM FINDER CORE FUNCTIONALITY
-  // ==============================================
+  // Team Finder Methods
+  async searchTeamMembers(searchData: TeamSearchInput) {
+    return this.makeRequest<{ profiles: TeamMemberProfile[]; total: number }>("/api/team-search", {
+      method: "POST",
+      body: JSON.stringify(searchData),
+    });
+  }
 
-// Team Finder Methods
-async searchTeamMembers(searchData: TeamSearchInput) {
-  return this.makeRequest<{ profiles: TeamMemberProfile[]; total: number }>("/api/team-search", {
-    method: "POST",
-    body: JSON.stringify(searchData),
-  });
-}
+  // Connection Request Methods
+  async sendConnectionRequest(receiverId: string, message = '') {
+    return this.makeRequest<{ request_id: string; status: string }>("/api/connection-requests", {
+      method: "POST",
+      body: JSON.stringify({ receiver_id: receiverId, message }),
+    });
+  }
 
-// Connection Request Methods
-async sendConnectionRequest(receiverId: string, message = '') {
-  return this.makeRequest<{ request_id: string; status: string }>("/api/connection-requests", {
-    method: "POST",
-    body: JSON.stringify({ receiver_id: receiverId, message }),
-  });
-}
+  async getReceivedConnectionRequests() {
+    return this.makeRequest<{ requests: ConnectionRequest[]; total: number }>("/api/connection-requests/received");
+  }
 
-async getReceivedConnectionRequests() {
-  return this.makeRequest<{ requests: ConnectionRequest[]; total: number }>("/api/connection-requests/received");
-}
+  async getSentConnectionRequests() {
+    return this.makeRequest<{ requests: ConnectionRequest[]; total: number }>("/api/connection-requests/sent");
+  }
 
-async getSentConnectionRequests() {
-  return this.makeRequest<{ requests: ConnectionRequest[]; total: number }>("/api/connection-requests/sent");
-}
+  async respondToConnectionRequest(requestId: string, action: 'accept' | 'reject') {
+    return this.makeRequest<{ message: string }>(`/api/connection-requests/${requestId}/respond`, {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    });
+  }
 
-async respondToConnectionRequest(requestId: string, action: 'accept' | 'reject') {
-  return this.makeRequest<{ message: string }>(`/api/connection-requests/${requestId}/respond`, {
-    method: "POST",
-    body: JSON.stringify({ action }),
-  });
-}
+  async checkConnectionStatus(targetUserId: string) {
+    return this.makeRequest<{ status: string }>(`/api/connection-status/${targetUserId}`);
+  }
 
-async checkConnectionStatus(targetUserId: string) {
-  return this.makeRequest<{ status: string }>(`/api/connection-status/${targetUserId}`);
-}
+  // Connection Management
+  async getConnections() {
+    return this.makeRequest<{ connections: TeamMemberProfile[] }>("/api/connections");
+  }
 
-// Connection Management
-async getConnections() {
-  return this.makeRequest<{ connections: TeamMemberProfile[] }>("/api/connections");
-}
+  async removeConnection(targetUserId: string) {
+    return this.makeRequest<{ message: string }>(`/api/connections/${targetUserId}`, {
+      method: "DELETE",
+    });
+  }
 
-async removeConnection(targetUserId: string) {
-  return this.makeRequest<{ message: string }>(`/api/connections/${targetUserId}`, {
-    method: "DELETE",
-  });
-}
+  // Chat Methods
+  async createConversation(targetUserId: string) {
+    return this.makeRequest<{ id: string; participant_ids: string[]; participant_names: string[] }>("/api/conversations", {
+      method: "POST",
+      body: JSON.stringify({ target_user_id: targetUserId }),
+    });
+  }
 
-// Chat Methods
-async createConversation(targetUserId: string) {
-  return this.makeRequest<{ id: string; participant_ids: string[]; participant_names: string[] }>("/api/conversations", {
-    method: "POST",
-    body: JSON.stringify({ target_user_id: targetUserId }),
-  });
-}
+  async getConversations() {
+    return this.makeRequest<{ conversations: Conversation[] }>("/api/conversations");
+  }
 
-async getConversations() {
-  return this.makeRequest<{ conversations: Conversation[] }>("/api/conversations");
-}
+  async sendMessage(conversationId: string, content: string) {
+    return this.makeRequest<Message>("/api/messages", {
+      method: "POST",
+      body: JSON.stringify({
+        conversation_id: conversationId,
+        content,
+        message_type: "text"
+      }),
+    });
+  }
 
-async sendMessage(conversationId: string, content: string) {
-  return this.makeRequest<Message>("/api/messages", {
-    method: "POST",
-    body: JSON.stringify({
-      conversation_id: conversationId,
-      content,
-      message_type: "text"
-    }),
-  });
-}
-
-async getMessages(conversationId: string, skip = 0, limit = 50) {
-  return this.makeRequest<{ messages: Message[] }>(`/api/messages/${conversationId}?skip=${skip}&limit=${limit}`);
-}
+  async getMessages(conversationId: string, skip = 0, limit = 50) {
+    return this.makeRequest<{ messages: Message[] }>(`/api/messages/${conversationId}?skip=${skip}&limit=${limit}`);
+  }
 
   // Health Check
   async healthCheck() {
     return this.makeRequest<HealthCheckResponse>("/health");
   }
 
-  // Legacy Chat Methods (for existing Help component)
+  // Legacy Chat Methods (for existing Help component compatibility)
   async sendChatMessage(message: ChatMessage) {
     return this.makeRequest<ChatResponse>("/chat", {
       method: "POST",
@@ -402,11 +475,7 @@ export interface UserActivityStats {
   total_activity: number;
 }
 
-// ==============================================
-// TEAM FINDER CORE TYPES
-// ==============================================
-
-// Team Search Types
+// Team Finder Core Types
 export interface TeamSearchInput {
   required_skills: string[];
   preferred_role?: string;
