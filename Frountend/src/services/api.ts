@@ -333,7 +333,6 @@ export interface UserProfile {
   role?: string;
   skills?: string[];
   interests?: string[];
-  preferred_role?: string;
   experience?: string;
   availability?: string;
   location?: string;
@@ -348,7 +347,6 @@ export interface UserProfileCreate {
   role?: string;
   skills?: string[];
   interests?: string[];
-  preferred_role?: string;
   experience?: string;
   availability?: string;
   location?: string;
@@ -478,7 +476,7 @@ export interface UserActivityStats {
 // Team Finder Core Types
 export interface TeamSearchInput {
   required_skills: string[];
-  preferred_role?: string;
+  current_role?: string;  // Changed from preferred_role
   experience?: string;
   availability?: string;
   location?: string;
@@ -494,7 +492,7 @@ export interface TeamMemberProfile {
   role: string;
   skills: string[];
   interests: string[];
-  preferred_role: string;
+  current_role: string;  // Changed from preferred_role
   experience: string;
   availability: string;
   location: string;

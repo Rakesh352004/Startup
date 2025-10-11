@@ -1,22 +1,20 @@
 // src/components/Sidebar.tsx
-import React, { useState, ReactElement } from "react";
+import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  FaHome,
-  FaClipboardCheck,
-  FaSearch,
-  FaMap,
-  FaUsers,
-  FaUser,
-  FaEnvelope,
-  FaTimes,
-  FaBars,
-  FaSignOutAlt
-} from "react-icons/fa";
+  Home,
+  Lightbulb,
+  BookOpen,
+  Rocket,
+  Users,
+  User,
+  HelpCircle,
+  LucideIcon,
+} from "lucide-react";
 
 interface MenuItem {
   name: string;
-  icon: ReactElement;
+  Icon: LucideIcon;
   path: string;
 }
 
@@ -35,13 +33,41 @@ export default function Sidebar() {
   }
 
   const menuItems: MenuItem[] = [
-    { name: "Home", icon: <FaHome />, path: "/home" },
-    { name: "Idea Validation", icon: <FaClipboardCheck />, path: "/idea-validation" },
-    { name: "Research", icon: <FaSearch />, path: "/research-papers" },
-    { name: "Roadmap", icon: <FaMap />, path: "/roadmap" },
-    { name: "Team Maker", icon: <FaUsers />, path: "/team-maker" },
-    { name: "Profile", icon: <FaUser />, path: "/profile" },
-    { name: "help", icon: <FaEnvelope />, path: "/help" },
+    { 
+      name: "Home", 
+      Icon: Home, 
+      path: "/home"
+    },
+    { 
+      name: "Idea Validator", 
+      Icon: Lightbulb, 
+      path: "/idea-validation"
+    },
+    { 
+      name: "Research Finder", 
+      Icon: BookOpen, 
+      path: "/research-papers"
+    },
+    { 
+      name: "Roadmap Generator", 
+      Icon: Rocket, 
+      path: "/roadmap"
+    },
+    { 
+      name: "Team Finder", 
+      Icon: Users, 
+      path: "/team-maker"
+    },
+    { 
+      name: "Profile", 
+      Icon: User, 
+      path: "/profile"
+    },
+    { 
+      name: "Help", 
+      Icon: HelpCircle, 
+      path: "/help"
+    },
   ];
 
   return (
@@ -51,24 +77,27 @@ export default function Sidebar() {
       onMouseEnter={() => setIsOpen(true)}
       onMouseLeave={() => setIsOpen(false)}
     >
-      
-
       {/* Menu Items */}
       <nav className="p-4">
         <ul className="space-y-2">
-          {menuItems.map((item) => (
-            <li key={item.path}>
-              <Link
-                to={item.path}
-                className={`flex items-center p-3 rounded-lg hover:bg-gray-800 transition-colors
-                  ${location.pathname === item.path ? "bg-gray-800" : ""}`}
-                onClick={() => setIsOpen(false)}
-              >
-                <span className="text-lg mr-4">{item.icon}</span>
-                {isOpen && <span>{item.name}</span>}
-              </Link>
-            </li>
-          ))}
+          {menuItems.map((item) => {
+            const IconComponent = item.Icon;
+            return (
+              <li key={item.path}>
+                <Link
+                  to={item.path}
+                  className={`flex items-center p-3 rounded-lg hover:bg-gray-800 transition-colors
+                    ${location.pathname === item.path ? "bg-gray-800" : ""}`}
+                  onClick={() => setIsOpen(false)}
+                >
+                  <span className="text-lg mr-4">
+                    <IconComponent className="w-5 h-5" />
+                  </span>
+                  {isOpen && <span>{item.name}</span>}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </nav>
     </div>

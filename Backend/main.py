@@ -22,6 +22,7 @@ import uuid
 import requests
 from collections import defaultdict
 from enhanced_realtime_chatbot import StartupGPSRealtimeChatbot, ChatMessage, ChatResponse
+import time
 
 from database import (
     users_collection, ideas_collection, profiles_collection, roadmaps_collection, 
@@ -50,7 +51,8 @@ from enhanced_realtime_chatbot import (
     ChatResponse,
     get_chatbot_instance
 )
-
+_ss_last_request_time = 0
+_ss_request_lock = asyncio.Lock()
 # Load environment variables
 load_dotenv()
 
@@ -130,7 +132,7 @@ class ProfileBase(BaseModel):
     role: Optional[str] = None
     skills: Optional[List[str]] = None
     interests: Optional[List[str]] = None
-    preferred_role: Optional[str] = None
+    # preferred_role removed
     experience: Optional[str] = None
     availability: Optional[str] = None
     location: Optional[str] = None
@@ -230,7 +232,7 @@ class RoadmapResponse(BaseModel):
     user_id: str
 class TeamSearchInput(BaseModel):
     required_skills: List[str]
-    preferred_role: Optional[str] = None
+    current_role: Optional[str] = None  # Changed from preferred_role
     experience: Optional[str] = None
     availability: Optional[str] = None
     location: Optional[str] = None
@@ -303,27 +305,42 @@ def create_access_token_helper(subject: str, role: str = "user"):
 # ENHANCED IDEA VALIDATION FUNCTIONALITY
 # ==========================================
 # Content filtering for harmful keywords
+# Replace the HARMFUL_KEYWORDS list (around line 330)
 HARMFUL_KEYWORDS = [
     # Violence and weapons
     'weapon', 'bomb', 'explosive', 'gun', 'knife', 'violence', 'kill', 'murder', 'assault',
-    'terrorism', 'terrorist', 'attack', 'harm', 'hurt', 'damage', 'destroy',
+    'terrorism', 'terrorist', 'attack', 'harm', 'hurt', 'damage', 'destroy', 'firearms',
+    'ammunition', 'grenade', 'missile', 'warfare', 'combat', 'shooting',
     
     # Illegal substances
     'drug dealer', 'cocaine', 'heroin', 'meth', 'illegal drugs', 'drug trafficking',
-    'drug cartel', 'smuggling', 'black market',
+    'drug cartel', 'smuggling', 'black market', 'narcotics', 'opium', 'fentanyl',
+    'crystal meth', 'marijuana trafficking', 'drug distribution',
     
     # Fraud and scams
     'ponzi scheme', 'pyramid scheme', 'scam', 'fraud', 'fake', 'counterfeit',
-    'money laundering', 'tax evasion', 'identity theft',
+    'money laundering', 'tax evasion', 'identity theft', 'credit card fraud',
+    'phishing', 'wire fraud', 'embezzlement', 'forgery', 'insurance fraud',
     
     # Adult content
     'pornography', 'adult content', 'sex work', 'escort service', 'strip club',
+    'sexual services', 'prostitution', 'brothel',
     
     # Gambling (in restricted contexts)
-    'illegal gambling', 'underground casino', 'betting scam',
+    'illegal gambling', 'underground casino', 'betting scam', 'unlicensed gambling',
     
-    # Hate speech
-    'hate speech', 'discrimination', 'racism', 'extremist', 'supremacy'
+    # Hate speech and discrimination
+    'hate speech', 'discrimination', 'racism', 'extremist', 'supremacy', 'genocide',
+    'ethnic cleansing', 'hate group', 'radicalization',
+    
+    # Hacking and cyber crimes
+    'hacking tools', 'malware creation', 'ransomware', 'ddos attack', 'data breach tools',
+    'exploit kit', 'botnet', 'keylogger', 'trojan development', 'zero-day exploit',
+    
+    # Other illegal activities
+    'human trafficking', 'organ trafficking', 'child exploitation', 'assassination',
+    'kidnapping', 'extortion', 'bribery', 'corruption scheme', 'illegal wildlife trade',
+    'endangered species trafficking', 'antiquities smuggling'
 ]
 
 def is_harmful_content(text: str) -> bool:
@@ -349,7 +366,130 @@ def is_harmful_content(text: str) -> bool:
             return True
     
     return False
+# Add this function after the is_harmful_content function (around line 370)
 
+def call_groq_roadmap_enhanced(prompt: str, timeframe: str) -> dict:
+    """Enhanced roadmap generation with content filtering"""
+    
+    # Check for harmful content
+    if is_harmful_content(prompt):
+        raise HTTPException(
+            status_code=400,
+            detail="Please enter a valid and appropriate startup idea. The content provided contains inappropriate elements."
+        )
+    
+    # Validate minimum quality
+    if len(prompt.strip()) < 30:
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide a more detailed description (at least 30 characters) for accurate roadmap generation."
+        )
+    
+    if not GROQ_API_KEY:
+        raise HTTPException(
+            status_code=500, 
+            detail="GROQ_API_KEY environment variable is not set."
+        )
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    system_prompt = """You are an AI Startup Roadmap Generator for "Startup GPS". 
+Your role is to create detailed, actionable roadmaps for startup ideas based on the user's input and timeframe.
+
+### Instructions:
+1. Analyze the startup idea and create a phased roadmap based on the specified timeframe.
+2. Structure the roadmap with:
+   - A comprehensive 3-4 sentence overview
+   - Multiple phases (typically 3-5 phases depending on timeframe)
+   
+3. For each phase, include:
+   - Title: Clear phase name with timeframe estimate (e.g., "Phase 1: 2-4 weeks - MVP Development")
+   - Description: 2-3 sentence overview of the phase
+   - Tasks: 4-6 specific, actionable tasks
+   - Implementation: 3-5 detailed implementation steps
+   - Resources: 3-5 required resources (tools, budget, etc.)
+   - Team: 2-4 team roles needed
+   - Challenges: 2-4 potential challenges and mitigation strategies
+
+4. Ensure the roadmap is:
+   - Actionable and specific
+   - Realistic for the given timeframe
+   - Technically sound
+   - Business-focused
+   - Adaptable to the specific industry/domain
+
+5. Timeframe guidance:
+   - 3 months: 3 phases, focus on MVP and validation
+   - 6 months: 4 phases, include scaling preparation
+   - 1 year: 5 phases, comprehensive growth strategy
+   - 2 years: 6 phases, long-term vision and expansion
+
+### Response Format (JSON):
+{
+  "overview": "Comprehensive 3-4 sentence overview of the entire roadmap...",
+  "phases": [
+    {
+      "title": "Phase 1: [Timeframe] - [Phase Name]",
+      "timeframe": "e.g., 2-4 weeks",
+      "description": "2-3 sentence description...",
+      "tasks": ["Task 1", "Task 2", "Task 3", "Task 4"],
+      "implementation": ["Step 1", "Step 2", "Step 3", "Step 4"],
+      "resources": ["Resource 1", "Resource 2", "Resource 3"],
+      "team": ["Role 1", "Role 2", "Role 3"],
+      "challenges": ["Challenge 1", "Challenge 2", "Challenge 3"]
+    }
+  ]
+}
+
+Provide ONLY the JSON response with no additional text."""
+
+    user_prompt = f"Create a detailed roadmap for this startup idea: {prompt}\nTimeframe: {timeframe}"
+
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0.4,
+        "max_tokens": 4000
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code, 
+                detail=f"GROQ API error: {response.text}"
+            )
+
+        data = response.json()
+        ai_text = data["choices"][0]["message"]["content"].strip()
+        
+        # Clean JSON response
+        if ai_text.startswith("```json"):
+            ai_text = ai_text[7:]
+        if ai_text.endswith("```"):
+            ai_text = ai_text[:-3]
+        ai_text = ai_text.strip()
+        
+        # Parse JSON
+        try:
+            result = json.loads(ai_text)
+            return result
+        except json.JSONDecodeError:
+            return parse_roadmap_fallback(ai_text, timeframe)
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Roadmap generation failed: {str(e)}"
+        )
 def calculate_accurate_overall_score(scores: Dict[str, int]) -> int:
     """Calculate more accurate overall score with proper weighting"""
     weights = {
@@ -1276,78 +1416,128 @@ def generate_search_terms(idea: str) -> List[str]:
     filtered_words = [word for word in words if word not in stop_words]
     return filtered_words[:5] if filtered_words else ["startup", "technology", "innovation"]
 
+# Replace fetch_semantic_scholar function
 async def fetch_semantic_scholar(search_terms: List[str], max_results: int) -> List[ResearchPaper]:
-    """Fetch papers from Semantic Scholar - always fetch 10 papers"""
+    """
+    Fetch papers from Semantic Scholar with rate limit protection
+    Rate limit: 1 request per second
+    """
+    global _ss_last_request_time
+    
     try:
-        query = " ".join(search_terms[:2])
+        query = " ".join(search_terms[:3])
+        papers = []
+        
         params = {
             "query": query,
-            "limit": 10,  # Always fetch 10 papers from Semantic Scholar
-            "fields": "title,authors,abstract,year,url,externalIds",
-            "sort": "relevance"
+            "limit": min(max_results * 2, 100),
+            "offset": 0,
+            "fields": "title,authors,abstract,year,url,externalIds,publicationDate,citationCount",
+            "sort": "citationCount:desc"
         }
 
         headers = {"User-Agent": "Research-Advisor-API/1.0"}
         if SEMANTIC_SCHOLAR_API_KEY:
             headers["x-api-key"] = SEMANTIC_SCHOLAR_API_KEY
+            logger.info("✅ Using Semantic Scholar API key")
+        else:
+            logger.warning("⚠️ No Semantic Scholar API key - using unauthenticated access")
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(SEMANTIC_SCHOLAR_API, params=params, headers=headers)
+        # Rate limiting: Ensure at least 1 second between requests
+        async with _ss_request_lock:
+            current_time = time.time()
+            time_since_last_request = current_time - _ss_last_request_time
             
-            if response.status_code != 200:
-                logger.warning(f"Semantic Scholar error {response.status_code}")
+            if time_since_last_request < 1.0:
+                wait_time = 1.0 - time_since_last_request
+                logger.info(f"⏱️ Rate limiting: waiting {wait_time:.2f}s before Semantic Scholar request")
+                await asyncio.sleep(wait_time)
+            
+            # Make the request
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(SEMANTIC_SCHOLAR_API, params=params, headers=headers)
+                _ss_last_request_time = time.time()
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                for item in data.get("data", []):
+                    try:
+                        title = item.get("title", "").strip()
+                        if not title or len(title) < 10:
+                            continue
+                        
+                        authors = [author.get("name", "") for author in item.get("authors", [])]
+                        if not authors:
+                            authors = ["Unknown"]
+                        
+                        abstract = item.get("abstract", "")
+                        if not abstract or abstract == "null":
+                            abstract = "No abstract available"
+                        elif len(abstract) > 500:
+                            abstract = abstract[:497] + "..."
+                        
+                        pub_year = item.get("year")
+                        if not pub_year and item.get("publicationDate"):
+                            try:
+                                pub_year = item["publicationDate"][:4]
+                            except:
+                                pub_year = ""
+                        pub_year = str(pub_year) if pub_year else ""
+                        
+                        url = item.get("url", "")
+                        if not url and item.get("externalIds", {}).get("DOI"):
+                            url = f"https://doi.org/{item['externalIds']['DOI']}"
+                        
+                        papers.append(ResearchPaper(
+                            title=title,
+                            authors=authors,
+                            abstract=abstract,
+                            published_date=pub_year,
+                            source="Semantic Scholar",
+                            url=url,
+                            doi=item.get("externalIds", {}).get("DOI")
+                        ))
+                        
+                    except Exception as e:
+                        logger.warning(f"Error processing Semantic Scholar paper: {e}")
+                        continue
+                
+                logger.info(f"Semantic Scholar: {len(papers)} papers fetched")
+                return papers
+            
+            elif response.status_code == 429:
+                logger.warning("Semantic Scholar rate limit exceeded (429). Increase delay between requests.")
                 return []
             
-            data = response.json()
-            papers = []
-            
-            for item in data.get("data", []):
-                try:
-                    title = item.get("title", "").strip()
-                    if not title:
-                        continue
-                        
-                    authors = [author.get("name", "") for author in item.get("authors", [])]
-                    abstract = (item.get("abstract") or "")[:500] + "..." if item.get("abstract") else "No abstract available"
-                    
-                    papers.append(ResearchPaper(
-                        title=title,
-                        authors=authors,
-                        abstract=abstract,
-                        published_date=str(item.get("year", "")),
-                        source="Semantic Scholar",
-                        url=item.get("url", ""),
-                        doi=item.get("externalIds", {}).get("DOI")
-                    ))
-                except Exception as e:
-                    logger.warning(f"Error processing Semantic Scholar paper: {e}")
-                    continue
-                    
-            return papers
+            else:
+                logger.warning(f"Semantic Scholar error {response.status_code}: {response.text[:200]}")
+                return []
             
     except Exception as e:
-        logger.warning(f"Semantic Scholar fetch failed: {e}")
+        logger.error(f"Semantic Scholar fetch failed: {e}")
         return []
 
+
 async def fetch_arxiv(search_terms: List[str], max_results: int) -> List[ResearchPaper]:
-    """Fetch papers from arXiv - always fetch 10 papers"""
+    """Fetch papers from arXiv - improved query"""
     try:
         if not search_terms:
             return []
 
-        query_terms = []
-        for term in search_terms[:3]:
-            words = term.split()[:2]
-            for word in words:
-                if len(word) > 2:
-                    query_terms.append(word)
+        # Build better query with multiple terms
+        query_parts = []
+        for term in search_terms[:4]:  # Use up to 4 terms
+            clean_term = term.strip()
+            if len(clean_term) > 2:
+                query_parts.append(clean_term)
         
-        query = " OR ".join(query_terms[:5])
+        query = " AND ".join(query_parts[:3]) if len(query_parts) > 1 else query_parts[0]
         
         params = {
-            "search_query": query,
+            "search_query": f"all:{query}",
             "start": 0,
-            "max_results": 10,  # Always fetch 10 papers from arXiv
+            "max_results": min(max_results * 2, 100),
             "sortBy": "relevance",
             "sortOrder": "descending"
         }
@@ -1361,30 +1551,85 @@ async def fetch_arxiv(search_terms: List[str], max_results: int) -> List[Researc
                 logger.warning(f"arXiv error {response.status_code}")
                 return []
 
-            papers = parse_arxiv_response(response.text, 10)  # Parse up to 10 papers
-
-            if not papers:
-                fallback_query = "machine learning OR neural network OR optimization"
-                params["search_query"] = fallback_query
-                response = await client.get(ARXIV_API, params=params, headers=headers)
-                if response.status_code == 200:
-                    papers = parse_arxiv_response(response.text, 10)  # Parse up to 10 papers
-
+            papers = parse_arxiv_response(response.text, max_results * 2)
+            logger.info(f"arXiv: {len(papers)} papers fetched")
             return papers
 
     except Exception as e:
-        logger.warning(f"arXiv fetch failed: {e}")
+        logger.error(f"arXiv fetch failed: {e}")
         return []
 
-async def fetch_crossref(search_terms: List[str], max_results: int) -> List[ResearchPaper]:
-    """Fetch papers from CrossRef - always fetch 10 papers"""
+def parse_arxiv_response(xml_text: str, max_results: int) -> List[ResearchPaper]:
+    """Helper to parse arXiv XML into ResearchPaper objects"""
     try:
-        query = " ".join(search_terms[:2])
+        root = ET.fromstring(xml_text)
+        papers = []
+
+        entries = root.findall('{http://www.w3.org/2005/Atom}entry')
+
+        for entry in entries[:max_results]:
+            try:
+                title_elem = entry.find('{http://www.w3.org/2005/Atom}title')
+                title = title_elem.text.strip() if title_elem is not None else ""
+                
+                if not title or len(title) < 10:
+                    continue
+
+                summary_elem = entry.find('{http://www.w3.org/2005/Atom}summary')
+                abstract = summary_elem.text.strip() if summary_elem is not None else "No abstract available"
+                if len(abstract) > 500:
+                    abstract = abstract[:497] + "..."
+
+                authors = []
+                for author_elem in entry.findall('{http://www.w3.org/2005/Atom}author'):
+                    name_elem = author_elem.find('{http://www.w3.org/2005/Atom}name')
+                    if name_elem is not None and name_elem.text:
+                        authors.append(name_elem.text.strip())
+                
+                if not authors:
+                    authors = ["Unknown"]
+
+                published_elem = entry.find('{http://www.w3.org/2005/Atom}published')
+                published_date = ""
+                if published_elem is not None and published_elem.text:
+                    published_date = published_elem.text[:4]
+
+                id_elem = entry.find('{http://www.w3.org/2005/Atom}id')
+                url = id_elem.text if id_elem is not None else ""
+
+                papers.append(ResearchPaper(
+                    title=title,
+                    authors=authors,
+                    abstract=abstract,
+                    published_date=published_date,
+                    source="arXiv",
+                    url=url,
+                    doi=None
+                ))
+
+            except Exception as e:
+                logger.warning(f"Error processing arXiv entry: {e}")
+                continue
+
+        return papers
+        
+    except ET.ParseError as e:
+        logger.error(f"XML parsing error: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Error parsing arXiv response: {e}")
+        return []
+async def fetch_crossref(search_terms: List[str], max_results: int) -> List[ResearchPaper]:
+    """Fetch papers from CrossRef - improved query"""
+    try:
+        # Build better query
+        query = " ".join(search_terms[:3])
+        
         params = {
             "query": query,
-            "rows": 10,  # Always fetch 10 papers from CrossRef
+            "rows": min(max_results * 2, 100),
             "sort": "relevance",
-            "select": "title,author,abstract,created,URL,DOI,published-print,published-online"
+            "select": "title,author,abstract,created,URL,DOI,published-print,published-online,is-referenced-by-count"
         }
         
         headers = {"User-Agent": "Research-Advisor-API/1.0 (mailto:contact@researchadvisor.com)"}
@@ -1404,30 +1649,33 @@ async def fetch_crossref(search_terms: List[str], max_results: int) -> List[Rese
                     title_list = item.get("title", [])
                     title = " ".join(title_list) if isinstance(title_list, list) else str(title_list)
                     title = title.strip()
-                    if not title:
+                    if not title or len(title) < 10:
                         continue
                     
-                    abstract = item.get("abstract", "")
-                    if not abstract:
-                        abstract = "No abstract available"
-                    if len(abstract) > 500:
-                        abstract = abstract[:500] + "..."
+                    abstract = item.get("abstract", "No abstract available")
+                    if abstract and abstract != "No abstract available":
+                        if len(abstract) > 500:
+                            abstract = abstract[:497] + "..."
                     
                     authors = []
-                    for author in item.get("author", []):
+                    for author in item.get("author", [])[:5]:
                         given = author.get("given", "")
                         family = author.get("family", "")
                         author_name = f"{given} {family}".strip()
                         if author_name:
                             authors.append(author_name)
                     
+                    if not authors:
+                        authors = ["Unknown"]
+                    
+                    # Get publication date
                     pub_date = ""
                     date_fields = ["published-print", "published-online", "created"]
                     for field in date_fields:
                         if field in item and "date-parts" in item[field]:
                             date_parts = item[field]["date-parts"][0]
-                            if date_parts:
-                                pub_date = "-".join(str(part) for part in date_parts[:3])
+                            if date_parts and len(date_parts) > 0:
+                                pub_date = str(date_parts[0])
                                 break
                     
                     papers.append(ResearchPaper(
@@ -1443,96 +1691,241 @@ async def fetch_crossref(search_terms: List[str], max_results: int) -> List[Rese
                 except Exception as e:
                     logger.warning(f"Error processing CrossRef item: {e}")
                     continue
-                    
+            
+            logger.info(f"CrossRef: {len(papers)} papers fetched")
             return papers
             
     except Exception as e:
-        logger.warning(f"CrossRef fetch failed: {e}")
+        logger.error(f"CrossRef fetch failed: {e}")
         return []
 
-def parse_arxiv_response(xml_text: str, max_results: int) -> List[ResearchPaper]:
-    """Helper to parse arXiv XML into ResearchPaper objects - updated to handle 10 papers"""
-    try:
-        root = ET.fromstring(xml_text)
-        papers = []
 
-        entries = root.findall('{http://www.w3.org/2005/Atom}entry')
+# Replace the deduplicate_and_rank_papers function in main.py
 
-        for entry in entries:
-            try:
-                title_elem = entry.find('{http://www.w3.org/2005/Atom}title')
-                title = title_elem.text.strip() if title_elem is not None else "No title"
-
-                summary_elem = entry.find('{http://www.w3.org/2005/Atom}summary')
-                abstract = summary_elem.text.strip() if summary_elem is not None else "No abstract available"
-                if len(abstract) > 500:
-                    abstract = abstract[:500] + "..."
-
-                authors = []
-                for author_elem in entry.findall('{http://www.w3.org/2005/Atom}author'):
-                    name_elem = author_elem.find('{http://www.w3.org/2005/Atom}name')
-                    if name_elem is not None and name_elem.text:
-                        authors.append(name_elem.text.strip())
-
-                published_elem = entry.find('{http://www.w3.org/2005/Atom}published')
-                published_date = published_elem.text if published_elem is not None else ""
-
-                id_elem = entry.find('{http://www.w3.org/2005/Atom}id')
-                url = id_elem.text if id_elem is not None else ""
-
-                papers.append(ResearchPaper(
-                    title=title,
-                    authors=authors,
-                    abstract=abstract,
-                    published_date=published_date,
-                    source="arXiv",
-                    url=url
-                ))
-
-            except Exception as e:
-                logger.warning(f"Error processing arXiv entry: {e}")
-                continue
-
-        return papers[:10]  # Return exactly 10 papers maximum
+def deduplicate_and_rank_papers(papers: List[ResearchPaper], target_count: int = 40) -> List[ResearchPaper]:
+    """
+    Deduplicate papers and return top N with BALANCED source distribution
+    Ensures papers from all sources are represented fairly
+    """
+    if not papers:
+        return []
+    
+    # Step 1: Deduplicate by normalized title
+    unique_papers = []
+    seen_titles = set()
+    
+    for paper in papers:
+        if not paper.title or len(paper.title.strip()) < 10:
+            continue
         
-    except ET.ParseError as e:
-        logger.warning(f"XML parsing error: {e}")
-        return []
-    except Exception as e:
-        logger.warning(f"Error parsing arXiv response: {e}")
-        return []
-
-
+        # Normalize title for comparison
+        normalized_title = re.sub(r'[^\w\s]', '', paper.title.lower())
+        normalized_title = re.sub(r'\s+', ' ', normalized_title).strip()
+        
+        if normalized_title and normalized_title not in seen_titles:
+            seen_titles.add(normalized_title)
+            unique_papers.append(paper)
+    
+    logger.info(f"After deduplication: {len(unique_papers)} unique papers")
+    
+    # Step 2: Group papers by source
+    papers_by_source = defaultdict(list)
+    for paper in unique_papers:
+        papers_by_source[paper.source].append(paper)
+    
+    logger.info(f"Source distribution before ranking: {dict((k, len(v)) for k, v in papers_by_source.items())}")
+    
+    # Step 3: Score papers within each source
+    for source, source_papers in papers_by_source.items():
+        scored = []
+        for paper in source_papers:
+            score = 0
+            
+            # Quality metrics (same for all sources)
+            # Has abstract (+20 points)
+            if paper.abstract and paper.abstract != "No abstract available":
+                score += 20
+                score += min(len(paper.abstract) / 50, 10)
+            
+            # Has URL (+15 points)
+            if paper.url:
+                score += 15
+            
+            # Has DOI (+15 points) 
+            if paper.doi:
+                score += 15
+            
+            # Has publication date (+10 points)
+            if paper.published_date:
+                score += 10
+                # Recent papers bonus
+                try:
+                    year = int(paper.published_date[:4])
+                    current_year = datetime.utcnow().year
+                    if year >= current_year - 3:  # Last 3 years
+                        score += 15
+                    elif year >= current_year - 5:  # Last 5 years
+                        score += 10
+                    elif year >= current_year - 10:  # Last 10 years
+                        score += 5
+                except:
+                    pass
+            
+            # Multiple authors (+5 points)
+            if len(paper.authors) > 1:
+                score += 5
+            
+            scored.append((score, paper))
+        
+        # Sort by score within each source
+        scored.sort(key=lambda x: x[0], reverse=True)
+        papers_by_source[source] = [paper for score, paper in scored]
+    
+    # Step 4: BALANCED SELECTION - Take papers from all sources proportionally
+    result = []
+    sources = list(papers_by_source.keys())
+    source_counts = {source: 0 for source in sources}
+    
+    # Calculate target distribution (proportional to available papers)
+    total_available = sum(len(papers_by_source[s]) for s in sources)
+    target_per_source = {}
+    
+    for source in sources:
+        available = len(papers_by_source[source])
+        # Each source gets at least min(8, available) papers
+        min_allocation = min(8, available)
+        # Remaining slots distributed proportionally
+        proportion = available / total_available if total_available > 0 else 0
+        target = max(min_allocation, int(target_count * proportion))
+        target_per_source[source] = min(target, available)
+    
+    logger.info(f"Target distribution per source: {target_per_source}")
+    
+    # Round-robin selection with quality priority
+    # First pass: Get top papers from each source up to their target
+    for source in sources:
+        target = target_per_source[source]
+        available_papers = papers_by_source[source]
+        
+        # Take up to target papers from this source
+        to_take = min(target, len(available_papers))
+        for i in range(to_take):
+            if len(result) < target_count:
+                result.append(available_papers[i])
+                source_counts[source] += 1
+    
+    # Second pass: Fill remaining slots with best papers from any source
+    if len(result) < target_count:
+        # Get all remaining papers
+        remaining_papers = []
+        for source in sources:
+            taken = source_counts[source]
+            remaining_papers.extend(papers_by_source[source][taken:])
+        
+        # Score and sort remaining papers
+        scored_remaining = []
+        for paper in remaining_papers:
+            score = 0
+            if paper.abstract and paper.abstract != "No abstract available":
+                score += 20 + min(len(paper.abstract) / 50, 10)
+            if paper.url:
+                score += 15
+            if paper.doi:
+                score += 15
+            if paper.published_date:
+                score += 10
+                try:
+                    year = int(paper.published_date[:4])
+                    current_year = datetime.utcnow().year
+                    if year >= current_year - 3:
+                        score += 15
+                except:
+                    pass
+            scored_remaining.append((score, paper))
+        
+        scored_remaining.sort(key=lambda x: x[0], reverse=True)
+        
+        # Add best remaining papers
+        for score, paper in scored_remaining:
+            if len(result) >= target_count:
+                break
+            result.append(paper)
+            source_counts[paper.source] += 1
+    
+    # Final result limited to target_count
+    result = result[:target_count]
+    
+    # Log final distribution
+    final_distribution = defaultdict(int)
+    for paper in result:
+        final_distribution[paper.source] += 1
+    
+    logger.info(f"Final distribution achieved: {dict(final_distribution)}")
+    logger.info(f"Returning top {len(result)} papers")
+    
+    return result
+def check_profile_completion_helper(profile: dict) -> tuple[bool, List[str]]:
+    """
+    Check if profile is complete and return missing fields
+    Returns: (is_complete, list_of_missing_fields)
+    """
+    missing_fields = []
+    
+    # Check all required fields
+    if not profile.get("name") or not str(profile.get("name")).strip():
+        missing_fields.append("Name")
+    
+    if not profile.get("email") or not str(profile.get("email")).strip():
+        missing_fields.append("Email")
+    
+    if not profile.get("role") or not str(profile.get("role")).strip():
+        missing_fields.append("Current Role")
+    
+    skills = profile.get("skills")
+    if not skills or not isinstance(skills, list) or len(skills) == 0:
+        missing_fields.append("Skills")
+    
+    interests = profile.get("interests")
+    if not interests or not isinstance(interests, list) or len(interests) == 0:
+        missing_fields.append("Interests")
+    
+    if not profile.get("experience") or not str(profile.get("experience")).strip():
+        missing_fields.append("Experience Level")
+    
+    if not profile.get("availability") or not str(profile.get("availability")).strip():
+        missing_fields.append("Availability")
+    
+    if not profile.get("location") or not str(profile.get("location")).strip():
+        missing_fields.append("Location")
+    
+    is_complete = len(missing_fields) == 0
+    return is_complete, missing_fields
 def calculate_match_score_and_details(profile: dict, requirements: dict) -> tuple:
-    """Calculate match score and matched items with stricter matching"""
+    """Calculate match score and matched items with updated field names"""
     score = 0
     matched_skills = []
     matched_interests = []
     
-    # Helper function for better matching
     def normalize_text(text: str) -> str:
         return text.lower().strip()
     
     def is_skill_match(profile_skill: str, req_skill: str) -> bool:
-        """Check if skills match (exact or close match)"""
+        """Check if skills match"""
         p_skill = normalize_text(profile_skill)
         r_skill = normalize_text(req_skill)
         
-        # Exact match
         if p_skill == r_skill:
             return True
         
-        # One contains the other (but must be significant overlap)
-        if len(r_skill) >= 3:  # Minimum 3 chars for substring match
+        if len(r_skill) >= 3:
             if r_skill in p_skill or p_skill in r_skill:
-                # Check if it's at least 70% of the word
                 overlap = min(len(r_skill), len(p_skill))
                 if overlap / max(len(r_skill), len(p_skill)) >= 0.7:
                     return True
         
         return False
     
-    # 1. REQUIRED SKILLS MATCHING (60% weight) - MOST IMPORTANT
+    # 1. REQUIRED SKILLS MATCHING (60% weight)
     req_skills = requirements.get("required_skills", [])
     if req_skills:
         profile_skills = profile.get("skills", [])
@@ -1542,35 +1935,31 @@ def calculate_match_score_and_details(profile: dict, requirements: dict) -> tupl
                 if is_skill_match(profile_skill, req_skill):
                     if profile_skill not in matched_skills:
                         matched_skills.append(profile_skill)
-                    break  # Move to next required skill
+                    break
         
-        # Calculate skill match ratio
         skill_match_ratio = len(matched_skills) / len(req_skills) if req_skills else 0
         score += skill_match_ratio * 60
     else:
-        # If no required skills specified, give base score
         score += 30
     
-    # 2. PREFERRED ROLE MATCHING (15% weight)
-    req_role = requirements.get("preferred_role", "").strip()
-    profile_role = profile.get("preferred_role", "").strip()
+    # 2. CURRENT ROLE MATCHING (15% weight) - UPDATED
+    req_role = requirements.get("current_role", "").strip()
+    profile_role = profile.get("role", "").strip()  # Using 'role' field
     
     if req_role and profile_role:
         req_role_norm = normalize_text(req_role)
         profile_role_norm = normalize_text(profile_role)
         
-        # Exact or substring match
         if req_role_norm == profile_role_norm or \
            req_role_norm in profile_role_norm or \
            profile_role_norm in req_role_norm:
             score += 15
         else:
-            # Partial credit for related roles (optional enhancement)
             role_words = set(req_role_norm.split())
             profile_words = set(profile_role_norm.split())
             common_words = role_words.intersection(profile_words)
             if common_words:
-                score += 7.5  # Half credit
+                score += 7.5
     
     # 3. EXPERIENCE LEVEL MATCHING (10% weight)
     req_experience = requirements.get("experience", "").strip()
@@ -1580,17 +1969,15 @@ def calculate_match_score_and_details(profile: dict, requirements: dict) -> tupl
         if normalize_text(req_experience) == normalize_text(profile_experience):
             score += 10
         else:
-            # Give partial credit for adjacent levels
             exp_levels = ["junior", "mid", "senior"]
             try:
                 req_idx = exp_levels.index(normalize_text(req_experience))
                 prof_idx = exp_levels.index(normalize_text(profile_experience))
-                if abs(req_idx - prof_idx) == 1:  # Adjacent level
+                if abs(req_idx - prof_idx) == 1:
                     score += 5
             except ValueError:
                 pass
     elif not req_experience:
-        # If no experience requirement, give base score
         score += 5
     
     # 4. AVAILABILITY MATCHING (5% weight)
@@ -1611,14 +1998,11 @@ def calculate_match_score_and_details(profile: dict, requirements: dict) -> tupl
         req_loc_norm = normalize_text(req_location)
         prof_loc_norm = normalize_text(profile_location)
         
-        # Check for "remote" keyword
         if "remote" in req_loc_norm and "remote" in prof_loc_norm:
             score += 5
-        # Check for city/location match
         elif req_loc_norm in prof_loc_norm or prof_loc_norm in req_loc_norm:
             score += 5
         else:
-            # Check for partial location match (e.g., state, country)
             req_loc_parts = set(req_loc_norm.split())
             prof_loc_parts = set(prof_loc_norm.split())
             if req_loc_parts.intersection(prof_loc_parts):
@@ -1626,7 +2010,7 @@ def calculate_match_score_and_details(profile: dict, requirements: dict) -> tupl
     elif not req_location:
         score += 2.5
     
-    # 6. INTERESTS MATCHING (5% weight) - BONUS
+    # 6. INTERESTS MATCHING (5% weight)
     req_interests = requirements.get("interests", [])
     if req_interests:
         profile_interests = profile.get("interests", [])
@@ -1642,9 +2026,7 @@ def calculate_match_score_and_details(profile: dict, requirements: dict) -> tupl
             interest_match_ratio = len(matched_interests) / len(req_interests)
             score += interest_match_ratio * 5
     
-    # Ensure score is within valid range
     final_score = min(100, max(0, int(score)))
-    
     return final_score, matched_skills, matched_interests
 
 
@@ -1838,14 +2220,16 @@ async def chat_with_idea(
             detail="Chat service temporarily unavailable"
         )
 # Enhanced Roadmap Generation Endpoint
+# Replace the existing /generate-roadmap endpoint (around line 1450)
+
 @app.post("/generate-roadmap", response_model=RoadmapResponse)
 async def generate_roadmap(roadmap_input: RoadmapInput, current_user=Depends(get_optional_current_user)):
-    """Enhanced roadmap generation with optional authentication for database storage"""
+    """Enhanced roadmap generation with content filtering and optional authentication"""
     logger.info(f"Roadmap request received: {roadmap_input.prompt[:50]}...")
     
     try:
-        # Get AI roadmap generation
-        ai_result = call_groq_roadmap(roadmap_input.prompt, roadmap_input.timeframe)
+        # Get AI roadmap generation with enhanced filtering
+        ai_result = call_groq_roadmap_enhanced(roadmap_input.prompt, roadmap_input.timeframe)
         logger.info("AI roadmap generation completed")
         
         # Default values for anonymous users
@@ -1905,19 +2289,40 @@ async def generate_roadmap(roadmap_input: RoadmapInput, current_user=Depends(get
             user_id=user_id
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Roadmap generation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Roadmap generation failed: {str(e)}")
 
 # Research Papers Endpoint
+# Replace the /research-papers endpoint (around line 1500)
+
+# Replace your /research-papers endpoint in main.py
+
 @app.post("/research-papers", response_model=ResearchResponse)
-async def get_research_papers(request: ResearchRequest, current_user=Depends(get_optional_current_user)) -> ResearchResponse:
-    """Fetch research papers with optional user authentication for saving"""
-    logger.info(f"Research request received: {request.idea[:50]}...")
+async def get_research_papers(
+    request: ResearchRequest, 
+    current_user=Depends(get_optional_current_user)
+) -> ResearchResponse:
+    """
+    Fetch exactly 40 high-quality research papers from 3 sources in parallel,
+    properly deduplicated and ranked by quality
+    """
+    logger.info(f"Research request: {request.idea[:50]}...")
     
-    # Input validation
-    if not request.idea or not request.idea.strip():
-        raise HTTPException(status_code=400, detail="Idea cannot be empty")
+    # Content validation
+    if is_harmful_content(request.idea):
+        raise HTTPException(
+            status_code=400,
+            detail="Please enter a valid research idea."
+        )
+    
+    if len(request.idea.strip()) < 10:
+        raise HTTPException(
+            status_code=400, 
+            detail="Please provide more detail (at least 10 characters)"
+        )
     
     try:
         # Generate search terms
@@ -1925,62 +2330,72 @@ async def get_research_papers(request: ResearchRequest, current_user=Depends(get
         if not search_terms:
             search_terms = [request.idea]
         
-        logger.info(f"Generated search terms: {search_terms}")
-        logger.info(f"Fetching 10 papers from each of the 3 sources for total of 30 papers")
+        logger.info(f"Search terms: {search_terms}")
         
-        # Concurrently fetch exactly 10 papers from each source
+        # ⚡ PARALLEL FETCH - All 3 APIs called simultaneously
+        logger.info("🚀 Fetching papers from all 3 sources IN PARALLEL...")
+        start_time = datetime.utcnow()
+        
+        # Create tasks for parallel execution
         tasks = [
-            fetch_semantic_scholar(search_terms, 10),
-            fetch_arxiv(search_terms, 10),
-            fetch_crossref(search_terms, 10)
+            fetch_semantic_scholar(search_terms, 50),
+            fetch_arxiv(search_terms, 50),
+            fetch_crossref(search_terms, 50)
         ]
         
+        # Execute all tasks simultaneously
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
+        end_time = datetime.utcnow()
+        fetch_duration = (end_time - start_time).total_seconds()
+        logger.info(f"⏱️ All 3 APIs completed in {fetch_duration:.2f} seconds")
+        
+        # Process results
         all_papers: List[ResearchPaper] = []
         source_names = ["Semantic Scholar", "arXiv", "CrossRef"]
+        source_counts = {}
         
         for i, result in enumerate(results):
-            source_name = source_names[i]
+            source = source_names[i]
             if isinstance(result, Exception):
-                logger.warning(f"{source_name} failed with error: {result}")
+                logger.warning(f"❌ {source} failed: {result}")
+                source_counts[source] = 0
             elif isinstance(result, list):
-                valid_papers = 0
-                for paper in result:
-                    if isinstance(paper, ResearchPaper):
-                        all_papers.append(paper)
-                        valid_papers += 1
-                logger.info(f"{source_name}: {valid_papers} papers fetched")
+                paper_count = len(result)
+                all_papers.extend(result)
+                source_counts[source] = paper_count
+                logger.info(f"✅ {source}: {paper_count} papers")
         
-        logger.info(f"Total papers fetched: {len(all_papers)}")
+        # Log combined results
+        logger.info(f"📊 Combined totals: SS={source_counts.get('Semantic Scholar', 0)}, "
+                   f"arXiv={source_counts.get('arXiv', 0)}, "
+                   f"CrossRef={source_counts.get('CrossRef', 0)}")
+        logger.info(f"📚 Total papers before deduplication: {len(all_papers)}")
         
-        # Deduplicate papers
-        unique_papers: List[ResearchPaper] = []
-        seen_titles: Set[str] = set()
+        # Deduplicate and rank to get best 40 papers
+        final_papers = deduplicate_and_rank_papers(all_papers, target_count=40)
         
-        for paper in all_papers:
-            if not paper.title or not paper.title.strip():
-                continue
-            
-            normalized_title = re.sub(r'[^\w\s]', '', paper.title.lower())
-            normalized_title = re.sub(r'\s+', ' ', normalized_title).strip()
-            
-            if normalized_title and normalized_title not in seen_titles:
-                seen_titles.add(normalized_title)
-                unique_papers.append(paper)
+        logger.info(f"🎯 Final paper count after ranking: {len(final_papers)}")
         
-        # Limit final results to 30
-        final_papers = unique_papers[:30]
-        logger.info(f"Final result: {len(final_papers)} curated papers after deduplication")
+        # Log source distribution in final 40
+        final_source_dist = {}
+        for paper in final_papers:
+            final_source_dist[paper.source] = final_source_dist.get(paper.source, 0) + 1
         
-        research_id = "anonymous"
+        logger.info(f"📈 Final 40 paper distribution: {final_source_dist}")
+        
+        if not final_papers:
+            raise HTTPException(
+                status_code=404,
+                detail="No research papers found. Try different keywords."
+            )
         
         # Save to database if user is authenticated
+        research_id = "anonymous"
+        
         if current_user and final_papers:
             try:
                 user_id = str(current_user["_id"])
-                logger.info(f"Saving research for user: {current_user.get('email')}")
-                
                 paper_data_list = [p.dict() for p in final_papers]
                 research_doc = {
                     "idea": request.idea,
@@ -1988,10 +2403,9 @@ async def get_research_papers(request: ResearchRequest, current_user=Depends(get
                     "papers": paper_data_list,
                 }
                 research_id = save_research(user_id, research_doc)
-                logger.info(f"Research saved with ID: {research_id}")
+                logger.info(f"💾 Research saved: {research_id}")
             except Exception as e:
-                logger.error(f"Database save error: {e}")
-                # Continue anyway - research still works without saving
+                logger.error(f"❌ Save error: {e}")
         
         return ResearchResponse(
             papers=final_papers,
@@ -2003,8 +2417,11 @@ async def get_research_papers(request: ResearchRequest, current_user=Depends(get
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Research papers endpoint failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch research papers: {str(e)}")
+        logger.error(f"❌ Research failed: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Research failed: {str(e)}"
+        )
 # User Data Endpoints
 @app.get("/user/ideas")
 async def get_my_ideas(current_user=Depends(get_current_user)):
@@ -2286,14 +2703,29 @@ async def test_validation_save(current_user=Depends(get_current_user)):
 
 @app.post("/api/team-search")
 async def search_team_members(search_input: TeamSearchInput, current_user=Depends(get_current_user)):
-    """Search for team members based on requirements with minimum 30% match threshold"""
+    """Search for team members with profile completion check"""
     try:
         user_id = str(current_user["_id"])
         
-        # Validate that at least required_skills are provided
+        # Check if current user's profile is complete
+        user_profile = get_user_profile(user_id)
+        if not user_profile:
+            raise HTTPException(
+                status_code=400,
+                detail="Please create your profile before searching for team members"
+            )
+        
+        is_complete, missing_fields = check_profile_completion_helper(user_profile)
+        if not is_complete:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Please complete your profile. Missing fields: {', '.join(missing_fields)}"
+            )
+        
+        # Validate required skills
         if not search_input.required_skills or len(search_input.required_skills) == 0:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="At least one required skill must be specified"
             )
         
@@ -2306,13 +2738,12 @@ async def search_team_members(search_input: TeamSearchInput, current_user=Depend
         for profile in profiles_cursor:
             # Calculate match score
             match_score, matched_skills, matched_interests = calculate_match_score_and_details(
-                profile, 
+                profile,
                 search_input.dict()
             )
             
-            # STRICT FILTER: Only include profiles with >= 30% match
+            # Only include profiles with >= 30% match
             if match_score >= 30:
-                # Get user details
                 user = users_collection.find_one({"_id": profile["user_id"]})
                 if user:
                     profile_id = str(profile["user_id"])
@@ -2326,7 +2757,7 @@ async def search_team_members(search_input: TeamSearchInput, current_user=Depend
                         "role": profile.get("role", ""),
                         "skills": profile.get("skills", []),
                         "interests": profile.get("interests", []),
-                        "preferred_role": profile.get("preferred_role", ""),
+                        "current_role": profile.get("role", ""),  # Using role field
                         "experience": profile.get("experience", ""),
                         "availability": profile.get("availability", ""),
                         "location": profile.get("location", ""),
@@ -2337,12 +2768,11 @@ async def search_team_members(search_input: TeamSearchInput, current_user=Depend
                     }
                     matched_profiles.append(matched_profile)
         
-        # Sort by match score (highest first)
+        # Sort by match score
         matched_profiles.sort(key=lambda x: x["match_score"], reverse=True)
         
-        # Return top 20 matches
         return {
-            "profiles": matched_profiles[:20], 
+            "profiles": matched_profiles[:20],
             "total": len(matched_profiles),
             "search_criteria": search_input.dict()
         }

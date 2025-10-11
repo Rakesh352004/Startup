@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Briefcase, Users, Star, Mail, AlertCircle, Bell, MessageCircle, ArrowLeft, UserMinus } from 'lucide-react';
+import { Search, MapPin, Briefcase, Users, Star, Mail, AlertCircle, Bell, MessageCircle, ArrowLeft, UserMinus, UserCheck, AlertTriangle } from 'lucide-react';
 import apiService from '../services/api';
 
 interface TeamRequirements {
   required_skills: string[];
-  preferred_role: string;
+  current_role: string;  // Changed from preferred_role
   experience: string;
   availability: string;
   location: string;
@@ -18,7 +18,7 @@ interface MatchedProfile {
   role: string;
   skills: string[];
   interests: string[];
-  preferred_role: string;
+  current_role: string;  // Changed from preferred_role
   experience: string;
   availability: string;
   location: string;
@@ -43,7 +43,7 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
   const [currentView, setCurrentView] = useState<'dashboard' | 'search' | 'results' | 'requests'>('dashboard');
   const [requirements, setRequirements] = useState<TeamRequirements>({
     required_skills: [],
-    preferred_role: '',
+    current_role: '',  // Changed from preferred_role
     experience: '',
     availability: '',
     location: '',
@@ -59,6 +59,9 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
   const [processingRequests, setProcessingRequests] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
+  const [profileComplete, setProfileComplete] = useState<boolean>(true);
+  const [checkingProfile, setCheckingProfile] = useState<boolean>(true);
+  const [profileCheckMessage, setProfileCheckMessage] = useState<string>('');
 
   useEffect(() => {
     loadDashboardData();
@@ -68,11 +71,76 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
     try {
       await Promise.all([
         loadConnectionRequests(),
-        loadConnectedUsers()
+        loadConnectedUsers(),
+        checkProfileCompletion()
       ]);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
+  };
+
+  const checkProfileCompletion = async () => {
+    setCheckingProfile(true);
+    setProfileCheckMessage('');
+    
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setProfileComplete(false);
+        setProfileCheckMessage('Please log in to access team finder features.');
+        setCheckingProfile(false);
+        return;
+      }
+
+      const response = await fetch('http://localhost:8000/profile', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const profile = await response.json();
+        
+        // Check all required fields (updated to use 'role' instead of 'preferred_role')
+        const missingFields: string[] = [];
+        
+        if (!profile.name?.trim()) missingFields.push('Name');
+        if (!profile.email?.trim()) missingFields.push('Email');
+        if (!profile.role?.trim()) missingFields.push('Current Role');
+        if (!profile.skills || profile.skills.length === 0) missingFields.push('Skills');
+        if (!profile.interests || profile.interests.length === 0) missingFields.push('Interests');
+        if (!profile.experience?.trim()) missingFields.push('Experience Level');
+        if (!profile.availability?.trim()) missingFields.push('Availability');
+        if (!profile.location?.trim()) missingFields.push('Location');
+        
+        const isComplete = missingFields.length === 0;
+        setProfileComplete(isComplete);
+        
+        if (!isComplete) {
+          setProfileCheckMessage(
+            `Please complete the following fields in your profile: ${missingFields.join(', ')}`
+          );
+        }
+      } else {
+        setProfileComplete(false);
+        setProfileCheckMessage('Unable to load profile. Please complete your profile first.');
+      }
+    } catch (error) {
+      console.error('Error checking profile:', error);
+      setProfileComplete(false);
+      setProfileCheckMessage('Error checking profile completion. Please try again.');
+    } finally {
+      setCheckingProfile(false);
+    }
+  };
+
+  const handleFindTeamMembers = () => {
+    if (!profileComplete) {
+      setError(profileCheckMessage || 'Please complete your profile before searching for team members.');
+      return;
+    }
+    setCurrentView('search');
+    setError(null);
   };
 
   const loadConnectionRequests = async () => {
@@ -100,6 +168,12 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!profileComplete) {
+      setError(profileCheckMessage || 'Please complete your profile before searching for team members.');
+      return;
+    }
+    
     setIsSearching(true);
     setError(null);
     
@@ -181,7 +255,7 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
   };
 
   const disconnectUser = async (targetUserId: string, targetUserName: string) => {
-    if (!window.confirm(`Are you sure you want to disconnect from ${targetUserName}? This will remove them from your connections and you won't be able to chat anymore.`)) {
+    if (!window.confirm(`Are you sure you want to disconnect from ${targetUserName}?`)) {
       return;
     }
 
@@ -191,7 +265,6 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
       const response = await apiService.removeConnection(targetUserId);
       
       if (response.data) {
-        // Remove from connected profiles
         setConnectedProfiles(prev => prev.filter(profile => profile.id !== targetUserId));
       }
     } catch (error: any) {
@@ -205,7 +278,6 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
     }
   };
 
-  // Helper functions
   const addSkill = () => {
     if (skillInput.trim() && !requirements.required_skills.includes(skillInput.trim())) {
       setRequirements(prev => ({
@@ -346,7 +418,7 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
                       {request.user_profile && (
                         <div className="space-y-2 mb-4">
                           <div className="text-sm text-gray-300">
-                            <strong>Role:</strong> {request.user_profile.preferred_role || 'Not specified'}
+                            <strong>Role:</strong> {request.user_profile.role || 'Not specified'}
                           </div>
                           <div className="text-sm text-gray-300">
                             <strong>Experience:</strong> {request.user_profile.experience || 'Not specified'}
@@ -403,11 +475,35 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
             <p className="text-gray-300">Find and connect with team members</p>
           </div>
 
+          {/* Profile Completion Warning */}
+          {!profileComplete && (
+            <div className="mb-6 bg-yellow-900/20 border-2 border-yellow-500/50 rounded-xl p-6">
+              <div className="flex items-start">
+                <AlertTriangle className="w-6 h-6 text-yellow-400 mr-3 flex-shrink-0 mt-1" />
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-yellow-400 mb-2">Complete Your Profile</h3>
+                  <p className="text-yellow-200 mb-2">
+                    {profileCheckMessage || 'Your profile is incomplete. Please fill in all required fields to unlock team matching features.'}
+                  </p>
+                  <a 
+                    href="/profile"
+                    className="inline-flex items-center bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg transition font-semibold mt-2"
+                  >
+                    <UserCheck className="w-4 h-4 mr-2" />
+                    Complete Profile Now
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="mb-6 bg-red-900/20 border border-red-500/50 rounded-lg p-4">
-              <div className="flex items-center">
-                <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
-                <p className="text-red-300">{error}</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
+                  <p className="text-red-300">{error}</p>
+                </div>
                 <button 
                   onClick={() => setError(null)}
                   className="ml-auto text-red-400 hover:text-red-300"
@@ -421,11 +517,16 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
           {/* Action Buttons */}
           <div className="flex justify-center gap-4 mb-8">
             <button
-              onClick={() => setCurrentView('search')}
-              className="bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-xl font-semibold transition text-lg flex items-center"
+              onClick={handleFindTeamMembers}
+              disabled={!profileComplete || checkingProfile}
+              className={`px-6 py-3 rounded-xl font-semibold transition text-lg flex items-center ${
+                profileComplete 
+                  ? 'bg-indigo-600 hover:bg-indigo-700' 
+                  : 'bg-gray-600 cursor-not-allowed opacity-50'
+              }`}
             >
               <Search className="w-5 h-5 mr-2" />
-              Find Team Members
+              {checkingProfile ? 'Checking Profile...' : 'Find Team Members'}
             </button>
             
             <button
@@ -462,7 +563,7 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <h4 className="text-lg font-semibold text-green-300">{profile.name}</h4>
-                        <p className="text-gray-400 text-sm">{profile.preferred_role}</p>
+                        <p className="text-gray-400 text-sm">{profile.role}</p>
                       </div>
                       <span className="bg-green-600 px-2 py-1 rounded-full text-xs font-semibold">
                         Connected
@@ -494,7 +595,6 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
                     </div>
                     
                     <div className="space-y-2">
-                      {/* Main Action Buttons Row */}
                       <div className="flex gap-2">
                         <button
                           onClick={() => startChat(profile.id, profile.name)}
@@ -512,7 +612,6 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
                         </button>
                       </div>
                       
-                      {/* Disconnect Button */}
                       <button
                         onClick={() => disconnectUser(profile.id, profile.name)}
                         disabled={processingRequests.has(profile.id)}
@@ -570,7 +669,6 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
           )}
 
           <form onSubmit={handleSearch} className="space-y-5">
-            {/* Required Skills */}
             <div>
               <label className="block text-sm text-gray-300 mb-1">Required Skills *</label>
               <div className="flex space-x-2">
@@ -608,7 +706,6 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
               )}
             </div>
 
-            {/* Interests */}
             <div>
               <label className="block text-sm text-gray-300 mb-1">Interests</label>
               <div className="flex space-x-2">
@@ -651,8 +748,8 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
                 <label className="block text-sm text-gray-300 mb-1">Preferred Role</label>
                 <input
                   type="text"
-                  name="preferred_role"
-                  value={requirements.preferred_role}
+                  name="current_role"
+                  value={requirements.current_role}
                   onChange={handleInputChange}
                   placeholder="e.g. Developer, Designer"
                   className="w-full px-4 py-2 rounded-lg bg-[#1e293b] border border-gray-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -783,7 +880,7 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-xl font-semibold text-white">{profile.name}</h3>
-                    <p className="text-gray-400 text-sm">{profile.preferred_role}</p>
+                    <p className="text-gray-400 text-sm">{profile.role}</p>
                   </div>
                   <div className="bg-indigo-600 px-3 py-1 rounded-full flex items-center">
                     <Star className="w-3 h-3 mr-1" />
@@ -805,7 +902,6 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
                   )}
                 </div>
 
-                {/* Matched Skills */}
                 {profile.matched_skills.length > 0 && (
                   <div className="mb-4">
                     <p className="text-xs text-green-400 mb-2">Matched Skills ({profile.matched_skills.length})</p>
@@ -819,7 +915,6 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
                   </div>
                 )}
 
-                {/* All Skills */}
                 <div className="mb-4">
                   <p className="text-xs text-gray-400 mb-2">Skills:</p>
                   <div className="flex flex-wrap gap-1">

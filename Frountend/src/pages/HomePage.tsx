@@ -21,8 +21,10 @@ import {
   Sparkles,
   Compass,
   ChevronRight,
-  Trophy
+  Trophy,
+  HelpCircle
 } from "lucide-react";
+import logo from "../assets/logo.png";
 
 interface FormData {
   name: string;
@@ -140,6 +142,16 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white overflow-hidden">
+      {/* Fixed Help Button */}
+      <button
+        onClick={() => navigate("/help")}
+        className="fixed bottom-8 right-8 z-50 w-16 h-16 bg-gradient-to-br from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 rounded-full shadow-2xl hover:shadow-cyan-500/50 transition-all duration-300 hover:scale-110 group flex items-center justify-center border-2 border-blue-400/30"
+        aria-label="Help"
+      >
+        <HelpCircle className="w-8 h-8 text-white group-hover:rotate-12 transition-transform duration-300" />
+        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-400/20 to-cyan-400/20 blur-xl group-hover:blur-2xl transition-all duration-300"></div>
+      </button>
+
       {/* Custom CSS for animations */}
       <style>{`
         @keyframes float {
@@ -266,7 +278,7 @@ export default function HomePage() {
               Your Journey to Success
             </h2>
             <p className="text-xl text-gray-300 max-w-4xl mx-auto leading-relaxed">
-              Follow our proven 5-step methodology to transform your startup idea into a thriving business
+              Follow our proven 6-step methodology to transform your startup idea into a thriving business
             </p>
           </div>
 
@@ -274,15 +286,45 @@ export default function HomePage() {
           <div className="relative max-w-6xl mx-auto">
             {/* First Row - Steps 1-3 */}
             <div className="flex justify-center items-center mb-20 relative">
-              {/* Step 1 - Idea Validation */}
+              {/* Step 1 - Startup GPS Logo */}
               <FloatingCard delay={0} className="relative">
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-32 h-32 mb-4 relative">
+                    <img 
+                      src={logo} 
+                      alt="Startup GPS" 
+                      className="w-32 h-32 object-contain"
+                    />
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Startup GPS</h3>
+                  <p className="text-gray-300 text-sm max-w-[200px]">Begin your journey with AI-powered guidance</p>
+                </div>
+              </FloatingCard>
+
+              {/* Arrow 1 to 2 */}
+              <div className="flex items-center mx-8">
+                <div className="flex flex-col items-center">
+                  <div className="w-24 h-0.5 bg-gradient-to-r from-cyan-500 to-yellow-500 opacity-60 mb-1"></div>
+                  <div className="flex space-x-1">
+                    <div className="w-1 h-1 bg-yellow-500 rounded-full animate-pulse"></div>
+                    <div className="w-1 h-1 bg-yellow-500 rounded-full animate-pulse" style={{animationDelay: '0.5s'}}></div>
+                    <div className="w-1 h-1 bg-yellow-500 rounded-full animate-pulse" style={{animationDelay: '1s'}}></div>
+                  </div>
+                  <div className="mt-1">
+                    <ArrowRight className="w-5 h-5 text-yellow-400" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2 - Idea Validation */}
+              <FloatingCard delay={0.2} className="relative">
                 <div className="flex flex-col items-center text-center">
                   <div className="w-20 h-20 mb-4 relative">
                     <div className="absolute inset-0 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-2xl transform-gpu">
                       <Lightbulb className="w-10 h-10 text-white" />
                     </div>
                     <div className="absolute -top-2 -left-2 w-8 h-8 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
-                      1
+                      2
                     </div>
                   </div>
                   <h3 className="text-xl font-semibold text-white mb-2">Idea Validation</h3>
@@ -290,7 +332,7 @@ export default function HomePage() {
                 </div>
               </FloatingCard>
 
-              {/* Arrow 1 to 2 */}
+              {/* Arrow 2 to 3 */}
               <div className="flex items-center mx-8">
                 <div className="flex flex-col items-center">
                   <div className="w-24 h-0.5 bg-gradient-to-r from-yellow-500 to-indigo-500 opacity-60 mb-1"></div>
@@ -305,50 +347,19 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Step 2 - Research Finder */}
-              <FloatingCard delay={0.2} className="relative">
+              {/* Step 3 - Research Finder */}
+              <FloatingCard delay={0.4} className="relative">
                 <div className="flex flex-col items-center text-center">
                   <div className="w-20 h-20 mb-4 relative">
                     <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-2xl transform-gpu">
                       <BookOpen className="w-10 h-10 text-white" />
                     </div>
                     <div className="absolute -top-2 -left-2 w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
-                      2
+                      3
                     </div>
                   </div>
                   <h3 className="text-xl font-semibold text-white mb-2">Research Finder</h3>
                   <p className="text-gray-300 text-sm max-w-[200px]">Access 50M+ research papers for data-driven decisions</p>
-                </div>
-              </FloatingCard>
-
-              {/* Arrow 2 to 3 */}
-              <div className="flex items-center mx-8">
-                <div className="flex flex-col items-center">
-                  <div className="w-24 h-0.5 bg-gradient-to-r from-indigo-500 to-green-500 opacity-60 mb-1"></div>
-                  <div className="flex space-x-1">
-                    <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
-                    <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse" style={{animationDelay: '0.5s'}}></div>
-                    <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse" style={{animationDelay: '1s'}}></div>
-                  </div>
-                  <div className="mt-1">
-                    <ArrowRight className="w-5 h-5 text-green-400" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 3 - Roadmap Generator */}
-              <FloatingCard delay={0.4} className="relative">
-                <div className="flex flex-col items-center text-center">
-                  <div className="w-20 h-20 mb-4 relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-teal-500 rounded-2xl flex items-center justify-center shadow-2xl transform-gpu">
-                      <Map className="w-10 h-10 text-white" />
-                    </div>
-                    <div className="absolute -top-2 -left-2 w-8 h-8 bg-gradient-to-br from-green-500 to-teal-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
-                      3
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-semibold text-white mb-2">Roadmap Generator</h3>
-                  <p className="text-gray-300 text-sm max-w-[200px]">Get personalized roadmap with milestones and timelines</p>
                 </div>
               </FloatingCard>
             </div>
@@ -359,8 +370,8 @@ export default function HomePage() {
                 <svg width="300" height="60" viewBox="0 0 300 60" className="opacity-60">
                   <defs>
                     <linearGradient id="curveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#10b981" />
-                      <stop offset="100%" stopColor="#3b82f6" />
+                      <stop offset="0%" stopColor="#8b5cf6" />
+                      <stop offset="100%" stopColor="#10b981" />
                     </linearGradient>
                   </defs>
                   <path
@@ -371,22 +382,55 @@ export default function HomePage() {
                     strokeDasharray="5,5"
                     className="animate-pulse"
                   />
-                  <polygon points="245,8 255,10 245,12" fill="#3b82f6" />
+                  <polygon points="245,8 255,10 245,12" fill="#10b981" />
                 </svg>
               </div>
             </div>
 
-            {/* Second Row - Steps 4-5 */}
+            {/* Second Row - Steps 4-6 */}
             <div className="flex justify-center items-center relative">
-              {/* Step 4 - Team Builder */}
+              {/* Step 4 - Roadmap Generator */}
               <FloatingCard delay={0.6} className="relative">
                 <div className="flex flex-col items-center text-center">
                   <div className="w-20 h-20 mb-4 relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-2xl transform-gpu">
-                      <Users className="w-10 h-10 text-white" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-teal-500 rounded-2xl flex items-center justify-center shadow-2xl transform-gpu">
+                      <Rocket className="w-10 h-10 text-white" />
+                    </div>
+                    <div className="absolute -top-2 -left-2 w-8 h-8 bg-gradient-to-br from-green-500 to-teal-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
+                      4
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">Roadmap Generator</h3>
+                  <p className="text-gray-300 text-sm max-w-[200px]">Get personalized roadmap with milestones and timelines</p>
+                </div>
+              </FloatingCard>
+
+              {/* Arrow 4 to 5 */}
+              <div className="flex items-center mx-8">
+                <div className="flex flex-col items-center">
+                  <div className="w-24 h-0.5 bg-gradient-to-r from-green-500 to-blue-500 opacity-60 mb-1"></div>
+                  <div className="flex space-x-1">
+                    <div className="w-1 h-1 bg-blue-500 rounded-full animate-pulse"></div>
+                    <div className="w-1 h-1 bg-blue-500 rounded-full animate-pulse" style={{animationDelay: '0.5s'}}></div>
+                    <div className="w-1 h-1 bg-blue-500 rounded-full animate-pulse" style={{animationDelay: '1s'}}></div>
+                  </div>
+                  <div className="mt-1">
+                    <ArrowRight className="w-5 h-5 text-blue-400" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 5 - Team Builder */}
+              <FloatingCard delay={0.8} className="relative">
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-20 h-20 mb-4 relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-2xl transform-gpu overflow-hidden">
+                      <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"></path>
+                      </svg>
                     </div>
                     <div className="absolute -top-2 -left-2 w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
-                      4
+                      5
                     </div>
                   </div>
                   <h3 className="text-xl font-semibold text-white mb-2">Team Builder</h3>
@@ -394,10 +438,10 @@ export default function HomePage() {
                 </div>
               </FloatingCard>
 
-              {/* Final Arrow 4 to 5 */}
-              <div className="flex items-center mx-12">
+              {/* Final Arrow 5 to 6 */}
+              <div className="flex items-center mx-8">
                 <div className="flex flex-col items-center">
-                  <div className="w-32 h-0.5 bg-gradient-to-r from-blue-500 to-yellow-400 opacity-60 mb-1"></div>
+                  <div className="w-24 h-0.5 bg-gradient-to-r from-blue-500 to-yellow-400 opacity-60 mb-1"></div>
                   <div className="flex space-x-1">
                     <div className="w-1 h-1 bg-yellow-400 rounded-full animate-pulse"></div>
                     <div className="w-1 h-1 bg-yellow-400 rounded-full animate-pulse" style={{animationDelay: '0.5s'}}></div>
@@ -409,15 +453,15 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Step 5 - Success */}
-              <FloatingCard delay={0.8} className="relative">
+              {/* Step 6 - Success */}
+              <FloatingCard delay={1} className="relative">
                 <div className="flex flex-col items-center text-center">
                   <div className="w-20 h-20 mb-4 relative">
                     <div className="absolute inset-0 bg-gradient-to-br from-yellow-400 to-orange-400 rounded-2xl flex items-center justify-center shadow-2xl transform-gpu animate-pulse">
                       <Trophy className="w-10 h-10 text-white" />
                     </div>
                     <div className="absolute -top-2 -left-2 w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-400 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
-                      5
+                      6
                     </div>
                     {/* Success celebration particles */}
                     <div className="absolute -top-4 -right-4 w-3 h-3 bg-yellow-400 rounded-full animate-ping"></div>
@@ -432,7 +476,7 @@ export default function HomePage() {
 
           {/* Call to Action */}
           <div className="text-center mt-16">
-            <FloatingCard delay={1}>
+            <FloatingCard delay={1.2}>
               <div className="inline-flex items-center bg-gradient-to-r from-blue-600/20 to-cyan-600/20 backdrop-blur-sm px-6 py-3 rounded-full border border-blue-500/30">
                 <Sparkles className="w-5 h-5 text-blue-400 mr-2" />
                 <span className="text-blue-200 text-sm font-medium">Start your journey today and join thousands of successful founders</span>
@@ -462,6 +506,7 @@ export default function HomePage() {
                 features: ["Market analysis","Competitor research","Viability scoring","Risk assessment"],
                 gradient: "from-yellow-500 to-orange-500",
                 borderClass: "hover:border-yellow-500/50",
+                customIcon: null,
               },
               {
                 onClick: navigateToResearchAdvisor,
@@ -471,24 +516,31 @@ export default function HomePage() {
                 features: ["Academic database access","Expert analysis","Trend identification","Actionable insights"],
                 gradient: "from-indigo-500 to-purple-500",
                 borderClass: "hover:border-indigo-500/50",
+                customIcon: null,
               },
               {
                 onClick: navigateToRoadmapGenerator,
-                icon: Map,
+                icon: Rocket,
                 title: "Roadmap Generator",
                 description: "Get an actionable startup roadmap tailored to your specific goals and timeline.",
                 features: ["Milestone planning","Resource allocation","Timeline optimization","Progress tracking"],
                 gradient: "from-green-500 to-teal-500",
                 borderClass: "hover:border-green-500/50",
+                customIcon: null,
               },
               {
                 onClick: navigateToTeamBuilder,
-                icon: Users,
+                icon: null,
                 title: "Team Building",
                 description: "Find the perfect team members based on skills, vision alignment, and cultural fit.",
                 features: ["Skill matching","Vision alignment","Cultural fit analysis","Remote team support"],
                 gradient: "from-blue-500 to-purple-500",
                 borderClass: "hover:border-blue-500/50",
+                customIcon: (
+                  <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"></path>
+                  </svg>
+                ),
               }
             ].map((feature, index) => (
               <FloatingCard key={index} delay={index * 0.3}>
@@ -496,14 +548,28 @@ export default function HomePage() {
                   onClick={feature.onClick}
                   className={`bg-gradient-to-br from-gray-800/60 to-gray-900/60 backdrop-blur-sm p-8 rounded-2xl border border-gray-700/50 ${feature.borderClass} cursor-pointer transition-all duration-500 hover:transform hover:-translate-y-4 hover:scale-105 hover:shadow-2xl group transform-gpu perspective-1000 relative overflow-hidden h-full`}
                 >
-                  <div className="absolute inset-0 shimmer opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <div className="absolute inset-0 shimmer opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                   <div className="flex flex-col items-center mb-6 relative z-10">
                     <div className="mb-4">
-                      <Rotating3DIcon 
-                        Icon={feature.icon} 
-                        gradient={feature.gradient} 
-                        size="w-14 h-14"
-                      />
+                      {feature.customIcon ? (
+                        <div className={`w-14 h-14 relative transform-gpu perspective-1000`}>
+                          <div
+                            className={`w-full h-full bg-gradient-to-br ${feature.gradient} rounded-xl flex items-center justify-center shadow-2xl transform-gpu transition-all duration-300 hover:scale-110`}
+                            style={{
+                              animation: 'rotateY 4s linear infinite',
+                              transformStyle: 'preserve-3d',
+                            }}
+                          >
+                            {feature.customIcon}
+                          </div>
+                        </div>
+                      ) : (
+                        <Rotating3DIcon 
+                          Icon={feature.icon} 
+                          gradient={feature.gradient} 
+                          size="w-14 h-14"
+                        />
+                      )}
                     </div>
                     <h3 className="text-2xl font-semibold text-white group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-cyan-200 group-hover:bg-clip-text transition-all duration-300 text-center">
                       {feature.title}

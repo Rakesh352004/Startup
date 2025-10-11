@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiService, UserProfile } from "../services/api";
+import logo from "../assets/logo.png";
 
 interface User {
   name: string;
@@ -35,8 +36,6 @@ export default function Header() {
       
       if (response.error) {
         if (response.status === 404) {
-          // Profile not found but user is authenticated
-          // We could decode the JWT token to get basic user info, or show default
           setUser({
             name: "User", 
             email: "user@example.com"
@@ -55,7 +54,6 @@ export default function Header() {
       console.error("Error fetching user data:", err);
       setError(err instanceof Error ? err.message : "Failed to load user data");
       
-      // Check if token still exists
       const token = localStorage.getItem("token");
       if (!token) {
         navigate("/signin");
@@ -94,11 +92,8 @@ export default function Header() {
   };
 
   const handleLogout = () => {
-    // Clear auth token
     localStorage.removeItem("token");
-    // Clear user state
     setUser(null);
-    // Redirect to signin
     navigate("/signin");
     setMenuOpen(false);
   };
@@ -113,19 +108,11 @@ export default function Header() {
       <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 bg-[#0f172a] border-b border-gray-700 w-full h-16">
         {/* Left - Logo & Title */}
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-            <svg
-              className="text-blue-600 text-lg w-4 h-4"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path
-                fillRule="evenodd"
-                d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </div>
+          <img 
+            src="/logo.png" 
+            alt="Startup GPS Logo" 
+            className="w-10 h-10 object-contain"
+          />
           <span className="text-2xl font-semibold text-white">Startup GPS</span>
         </div>
 
@@ -145,21 +132,11 @@ export default function Header() {
     <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 bg-[#0f172a] border-b border-gray-700 w-full h-16">
       {/* Left - Logo & Title */}
       <div className="flex items-center space-x-3">
-        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
-          <svg
-            className="text-white w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-            />
-          </svg>
-        </div>
+        <img 
+          src={logo} 
+          alt="Startup GPS Logo" 
+          className="w-16 h-16 object-contain"
+        />
         <span className="text-2xl font-semibold text-white">Startup GPS</span>
       </div>
 
