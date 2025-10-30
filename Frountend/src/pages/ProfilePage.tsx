@@ -96,10 +96,10 @@ const Profile = () => {
       <div className="w-full max-w-5xl">
         {/* Header Section */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 mb-4 shadow-lg shadow-indigo-500/50">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 mb-4 shadow-lg shadow-indigo-500/50">
             <User className="w-10 h-10" />
           </div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 via-blue-500 to-pink-400 bg-clip-text text-transparent mb-2">
             Your Profile
           </h1>
           <p className="text-gray-400 text-sm">Manage your professional information</p>
@@ -280,7 +280,7 @@ const Profile = () => {
                 <button
                   type="button"
                   onClick={() => setIsEditing(true)}
-                  className="px-8 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 font-semibold transition-all duration-300 shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105"
+                  className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-500 hover:from-blue-500 hover:to-blue-500 font-semibold transition-all duration-300 shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105"
                 >
                   Edit Profile
                 </button>
@@ -296,7 +296,7 @@ const Profile = () => {
                   
                   <button 
                     type="submit" 
-                    className="px-8 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 font-semibold transition-all duration-300 shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105"
+                    className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-500 hover:to-blue-500 font-semibold transition-all duration-300 shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105"
                   >
                     Save Profile
                   </button>

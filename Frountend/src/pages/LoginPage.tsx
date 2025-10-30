@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
-import { Eye, EyeOff, LogIn } from "lucide-react";
+import { Eye, EyeOff, LogIn, Sparkles, Zap, TrendingUp } from "lucide-react";
 
 interface TokenPayload {
   sub: string;
@@ -49,160 +49,229 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Animated floating blobs */}
-      {[...Array(3)].map((_, i) => (
-        <div
-          key={i}
-          className="absolute w-72 h-72 rounded-full bg-gradient-to-br from-purple-600 to-blue-500 opacity-20 blur-3xl animate-[float_12s_ease-in-out_infinite]"
-          style={{
-            top: `${20 + i * 25}%`,
-            left: `${15 + i * 30}%`,
-            animationDelay: `${i * 3}s`,
-          }}
-        />
-      ))}
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 flex items-center justify-center px-4 relative overflow-hidden">
+      {/* Animated Background Elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        {/* Gradient Orbs */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 rounded-full blur-3xl animate-pulse delay-500" />
+        
+        {/* Grid Pattern */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(99,102,241,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(99,102,241,0.03)_1px,transparent_1px)] bg-[size:72px_72px]" />
+        
+        {/* Floating Particles */}
+        {[...Array(20)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-1 h-1 bg-indigo-400/40 rounded-full animate-float"
+            style={{
+              top: `${Math.random() * 100}%`,
+              left: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${5 + Math.random() * 10}s`,
+            }}
+          />
+        ))}
+      </div>
 
-      <div className="relative z-10 w-full max-w-5xl bg-gradient-to-br from-gray-800/70 to-gray-900/70 backdrop-blur-lg rounded-3xl border border-gray-700/50 shadow-2xl flex overflow-hidden animate-fade-in">
-        {/* Left Welcome Section */}
-        <div className="hidden md:flex flex-col justify-center items-center w-1/2 bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-600 text-white p-10 relative overflow-hidden">
-          <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_20%_20%,_white,_transparent_40%)] animate-pulse" />
-          <h1 className="text-4xl font-bold mb-4 relative animate-slide-down">
-            Welcome to StartupGPS
-          </h1>
-          <p className="text-lg text-indigo-100 relative text-center animate-fade-in">
-            Navigate your startup journey with confidence and clarity.
-          </p>
-        </div>
-
-        {/* Right Login Form */}
-        <div className="w-full md:w-1/2 p-10 flex flex-col justify-center">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-xl mb-3 animate-bounce-slow">
-              <LogIn className="w-6 h-6 text-white" />
-            </div>
-            <h2 className="text-2xl font-bold text-white animate-slide-up">
-              Sign in to your account
-            </h2>
-            <p className="text-gray-400 mt-1">Enter your details below</p>
-          </div>
-
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-6 animate-fade-in"
-          >
-            <div className="animate-slide-up delay-100">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Email Address
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-transparent transition-all duration-300"
-                placeholder="Enter your email"
-              />
-            </div>
-
-            <div className="animate-slide-up delay-200">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Password
-              </label>
+      {/* Main Container */}
+      <div className="relative z-10 w-full max-w-6xl flex items-center gap-8">
+        {/* Left Side - Welcome Section */}
+        <div className="hidden lg:flex flex-col flex-1 gap-8">
+          {/* Logo/Brand */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
               <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-transparent transition-all duration-300 pr-12"
-                  placeholder="Enter your password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300 transition-colors duration-200"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
-                  ) : (
-                    <Eye className="w-5 h-5" />
-                  )}
-                </button>
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-500 blur-xl opacity-50" />
+                <div className="relative w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center transform rotate-3">
+                  <Sparkles className="w-7 h-7 text-white" />
+                </div>
+              </div>
+              <div>
+                <h1 className="text-4xl font-bold text-white tracking-tight">StartupGPS</h1>
+                <p className="text-indigo-300 text-sm">Navigate Your Success</p>
               </div>
             </div>
-
-            <button
-              type="submit"
-              disabled={busy}
-              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white py-3 rounded-xl font-semibold transition-all duration-300 shadow-lg hover:shadow-2xl transform hover:-translate-y-1 hover:scale-105 disabled:opacity-50 disabled:hover:transform-none flex items-center justify-center gap-2 animate-pulse"
-            >
-              {busy ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Logging in...
-                </>
-              ) : (
-                <>
-                  <LogIn className="w-5 h-5" />
-                  Sign In
-                </>
-              )}
-            </button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-gray-400">
-              Don't have an account?{" "}
-              <Link
-                to="/register"
-                className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors duration-200 hover:underline"
-              >
-                Create account
-              </Link>
+            
+            <p className="text-xl text-gray-300 leading-relaxed max-w-md">
+              Transform your startup vision into reality with AI-powered validation, research, and strategic planning.
             </p>
           </div>
 
-          <div className="mt-4 text-center">
-            <Link
-              to="/forgot-password"
-              className="text-sm text-gray-500 hover:text-gray-400 transition-colors duration-200"
-            >
-              Forgot your password?
-            </Link>
+          {/* Feature Cards */}
+          <div className="space-y-4">
+            {[
+              { icon: Zap, title: "Instant Validation", desc: "Get AI-powered feedback on your ideas in seconds" },
+              { icon: TrendingUp, title: "Strategic Roadmaps", desc: "Build comprehensive execution plans" },
+              { icon: Sparkles, title: "Research Tools", desc: "Access academic papers and market insights" },
+            ].map((feature, idx) => (
+              <div
+                key={idx}
+                className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-5 hover:bg-white/10 transition-all duration-300 hover:scale-105 hover:border-indigo-400/30"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 to-purple-500/0 group-hover:from-indigo-500/10 group-hover:to-purple-500/10 rounded-2xl transition-all duration-300" />
+                <div className="relative flex items-start gap-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                    <feature.icon className="w-6 h-6 text-indigo-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-semibold mb-1">{feature.title}</h3>
+                    <p className="text-gray-400 text-sm">{feature.desc}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right Side - Login Form */}
+        <div className="flex-1 max-w-md w-full">
+          <div className="relative group">
+            {/* Card Glow Effect */}
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000" />
+            
+            {/* Card */}
+            <div className="relative bg-slate-900/90 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl p-8">
+              {/* Header */}
+              <div className="text-center mb-8">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl mb-4 shadow-lg shadow-indigo-500/50">
+                  <LogIn className="w-8 h-8 text-white" />
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-2">
+                  Welcome Back
+                </h2>
+                <p className="text-gray-400">Sign in to continue your journey</p>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Email Input */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-300">
+                    Email Address
+                  </label>
+                  <div className="relative group">
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full px-4 py-3.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-300 group-hover:border-slate-600/50"
+                      placeholder="you@example.com"
+                    />
+                    <div className="absolute inset-0 -z-10 bg-gradient-to-r from-indigo-500/0 to-purple-500/0 group-focus-within:from-indigo-500/20 group-focus-within:to-purple-500/20 rounded-xl blur transition-all duration-300" />
+                  </div>
+                </div>
+
+                {/* Password Input */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-300">
+                    Password
+                  </label>
+                  <div className="relative group">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full px-4 py-3.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-300 pr-12 group-hover:border-slate-600/50"
+                      placeholder="Enter your password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors duration-200 p-1"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-5 h-5" />
+                      ) : (
+                        <Eye className="w-5 h-5" />
+                      )}
+                    </button>
+                    <div className="absolute inset-0 -z-10 bg-gradient-to-r from-indigo-500/0 to-purple-500/0 group-focus-within:from-indigo-500/20 group-focus-within:to-purple-500/20 rounded-xl blur transition-all duration-300" />
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="relative w-full group overflow-hidden rounded-xl"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600 transition-transform duration-300 group-hover:scale-105" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 to-purple-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="relative px-6 py-3.5 flex items-center justify-center gap-2 font-semibold text-white">
+                    {busy ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Signing in...</span>
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="w-5 h-5" />
+                        <span>Sign In</span>
+                      </>
+                    )}
+                  </div>
+                </button>
+              </form>
+
+              {/* Footer Links */}
+              <div className="mt-8 space-y-4">
+                <div className="text-center">
+                  <Link
+                    to="/forgot-password"
+                    className="text-sm text-gray-400 hover:text-indigo-400 transition-colors duration-200"
+                  >
+                    Forgot your password?
+                  </Link>
+                </div>
+                
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-700/50" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-4 bg-slate-900/90 text-gray-400">New to StartupGPS?</span>
+                  </div>
+                </div>
+
+                <Link
+                  to="/register"
+                  className="block w-full text-center px-6 py-3 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-indigo-500/50 rounded-xl text-white font-medium transition-all duration-300"
+                >
+                  Create Account
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Extra Tailwind keyframes */}
+      {/* Custom Animations */}
       <style>{`
         @keyframes float {
-          0%, 100% { transform: translateY(0) translateX(0); }
-          50% { transform: translateY(-20px) translateX(10px); }
+          0%, 100% { 
+            transform: translateY(0) translateX(0) scale(1);
+            opacity: 0.3;
+          }
+          50% { 
+            transform: translateY(-20px) translateX(10px) scale(1.1);
+            opacity: 0.6;
+          }
         }
-        .animate-bounce-slow {
-          animation: bounce 3s infinite;
+        
+        .animate-float {
+          animation: float linear infinite;
         }
-        .animate-slide-up {
-          animation: slideUp 0.6s ease-out forwards;
+        
+        .delay-1000 {
+          animation-delay: 1s;
         }
-        .animate-slide-down {
-          animation: slideDown 0.6s ease-out forwards;
-        }
-        .animate-fade-in {
-          animation: fadeIn 1s ease-out forwards;
-        }
-        @keyframes slideUp {
-          from { transform: translateY(20px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        @keyframes slideDown {
-          from { transform: translateY(-20px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
+        
+        .delay-500 {
+          animation-delay: 0.5s;
         }
       `}</style>
     </div>

@@ -468,8 +468,8 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
       <div className="bg-[#0f172a] text-white min-h-screen px-4 py-8 font-['Inter']">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold mb-4 text-indigo-400 flex items-center justify-center">
-              <Users className="w-8 h-8 mr-3" />
+            <h2 className="text-5xl font-bold mb-4 text-white-400 flex items-center justify-center">
+            <Users className="w-10 h-10 mr-3 text-blue-500" />
               Team Finder
             </h2>
             <p className="text-gray-300">Find and connect with team members</p>

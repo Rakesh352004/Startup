@@ -775,11 +775,11 @@ const EnhancedIdeaValidation: React.FC = () => {
           {/* Header */}
           <div className="text-center mb-8">
             <div className="flex items-center justify-center gap-3 mb-4">
-              <IconLightbulb className="w-12 h-12 text-cyan-400" />
+              <IconLightbulb className="w-12 h-12 text-blue-400" />
               <h1 className="text-4xl sm:text-5xl font-bold text-white">
                 AI Startup Validator
               </h1>
-              <IconSparkles className="w-8 h-8 text-cyan-400" />
+              <IconSparkles className="w-8 h-8 text-blue-400" />
             </div>
             <p className="text-lg text-gray-300 max-w-3xl mx-auto">
               Powered by Advanced AI Analysis
@@ -794,7 +794,7 @@ const EnhancedIdeaValidation: React.FC = () => {
             <div className="max-w-4xl mx-auto">
               <div className="bg-slate-800 rounded-2xl p-8 shadow-xl border border-slate-700">
                 <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-3">
-                  <IconLightbulb className="w-7 h-7 text-cyan-400" />
+                  <IconLightbulb className="w-7 h-7 text-blue-400" />
                   Describe Your Startup Idea
                 </h2>
                 
@@ -805,7 +805,7 @@ const EnhancedIdeaValidation: React.FC = () => {
                       onChange={handlePromptChange}
                       placeholder="Example: 'I want to build a platform to connect farmers and citizens for fresh produce. The concept shows strong potential given the growing interest in local food systems and sustainable consumption...'"
                       rows={8}
-                      className="w-full p-6 bg-slate-700 text-white border border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 resize-none transition-all duration-300 placeholder-gray-400 text-base"
+                      className="w-full p-6 bg-slate-700 text-white border border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-all duration-300 placeholder-gray-400 text-base"
                     />
                     <div className="absolute bottom-4 right-4 flex items-center gap-3">
                       <button
