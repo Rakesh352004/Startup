@@ -1,5 +1,23 @@
-// src/services/api.ts - Updated with Fixed Chatbot Integration
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+// src/services/api.ts - PRODUCTION READY
+// ==============================================
+// PRODUCTION CONFIGURATION
+// ==============================================
+
+// Determine API URL based on environment
+const getApiBaseUrl = (): string => {
+  // Check if we're in production (deployed)
+  if (process.env.NODE_ENV === 'production') {
+    // Use production backend URL from environment variable
+    return process.env.REACT_APP_API_URL || 'https://startup-gps-backend-6rcx.onrender.com';
+  }
+  
+  // Development - use local backend
+  return process.env.REACT_APP_API_URL || 'http://localhost:8000';
+};
+
+const API_BASE_URL = getApiBaseUrl();
+console.log('🌐 API Base URL:', API_BASE_URL);
+console.log('🔧 Environment:', process.env.NODE_ENV);
 
 interface ApiResponse<T> {
   data?: T;
@@ -21,7 +39,10 @@ class ApiService {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const url = `${API_BASE_URL}${endpoint}`;
+      console.log(`📡 API Request: ${options.method || 'GET'} ${url}`);
+      
+      const response = await fetch(url, {
         ...options,
         headers: {
           ...this.getAuthHeaders(),
@@ -31,6 +52,7 @@ class ApiService {
 
       const status = response.status;
 
+      // Handle 401 - Unauthorized
       if (status === 401) {
         const token = localStorage.getItem("token") || sessionStorage.getItem("token");
         if (token) {
@@ -51,7 +73,7 @@ class ApiService {
       const data = await response.json();
       return { data, status };
     } catch (error) {
-      console.error("API Request failed:", error);
+      console.error("❌ API Request failed:", error);
       return {
         error: error instanceof Error ? error.message : "Network error",
         status: 0,
@@ -60,7 +82,7 @@ class ApiService {
   }
 
   // ==============================================
-  // CHATBOT API METHODS (FIXED)
+  // CHATBOT API METHODS
   // ==============================================
 
   // Create chat session
@@ -133,10 +155,9 @@ class ApiService {
   }
 
   // ==============================================
-  // EXISTING API METHODS (Keep all your existing methods)
+  // AUTHENTICATION METHODS
   // ==============================================
 
-  // Authentication Methods
   async login(credentials: LoginCredentials) {
     return this.makeRequest<LoginResponse>("/login", {
       method: "POST",
@@ -151,7 +172,10 @@ class ApiService {
     });
   }
 
-  // User Profile Methods
+  // ==============================================
+  // USER PROFILE METHODS
+  // ==============================================
+
   async getUserProfile() {
     return this.makeRequest<UserProfile>("/profile");
   }
@@ -170,7 +194,10 @@ class ApiService {
     });
   }
 
-  // Idea Validation
+  // ==============================================
+  // IDEA VALIDATION
+  // ==============================================
+
   async validateIdea(prompt: string) {
     return this.makeRequest<ValidationResponse>("/validate-idea-enhanced", {
       method: "POST",
@@ -178,7 +205,10 @@ class ApiService {
     });
   }
 
-  // Roadmap Methods
+  // ==============================================
+  // ROADMAP METHODS
+  // ==============================================
+
   async generateRoadmap(roadmapData: RoadmapInput) {
     return this.makeRequest<RoadmapResponse>("/generate-roadmap", {
       method: "POST",
@@ -190,7 +220,10 @@ class ApiService {
     return this.makeRequest<{ roadmaps: RoadmapResponse[]; total: number }>("/user/roadmaps");
   }
 
-  // Research Methods
+  // ==============================================
+  // RESEARCH METHODS
+  // ==============================================
+
   async getResearchPapers(request: ResearchRequest) {
     return this.makeRequest<ResearchResponse>("/research-papers", {
       method: "POST",
@@ -202,7 +235,10 @@ class ApiService {
     return this.makeRequest<{ research: ResearchHistoryItem[]; total: number }>("/user/research");
   }
 
-  // User Data Methods
+  // ==============================================
+  // USER DATA METHODS
+  // ==============================================
+
   async getUserIdeas() {
     return this.makeRequest<{ ideas: IdeaHistoryItem[]; total: number }>("/user/ideas");
   }
@@ -211,7 +247,10 @@ class ApiService {
     return this.makeRequest<UserActivityStats>("/user/activity");
   }
 
-  // Team Finder Methods
+  // ==============================================
+  // TEAM FINDER METHODS
+  // ==============================================
+
   async searchTeamMembers(searchData: TeamSearchInput) {
     return this.makeRequest<{ profiles: TeamMemberProfile[]; total: number }>("/api/team-search", {
       method: "POST",
@@ -219,7 +258,10 @@ class ApiService {
     });
   }
 
-  // Connection Request Methods
+  // ==============================================
+  // CONNECTION REQUEST METHODS
+  // ==============================================
+
   async sendConnectionRequest(receiverId: string, message = '') {
     return this.makeRequest<{ request_id: string; status: string }>("/api/connection-requests", {
       method: "POST",
@@ -235,8 +277,7 @@ class ApiService {
     return this.makeRequest<{ requests: ConnectionRequest[]; total: number }>("/api/connection-requests/sent");
   }
 
- async respondToConnectionRequest(requestId: string, action: 'accept' | 'reject') {
-    // Use the correct endpoint that exists in backend
+  async respondToConnectionRequest(requestId: string, action: 'accept' | 'reject') {
     return this.makeRequest<{ message: string; status: string }>(`/api/connection-requests/${requestId}`, {
       method: "PUT", 
       body: JSON.stringify({ action }),
@@ -248,8 +289,10 @@ class ApiService {
     return this.makeRequest<any>(`/api/debug/connection-status/${targetUserId}`);
   }
 
- 
-  // Connection Management
+  // ==============================================
+  // CONNECTION MANAGEMENT
+  // ==============================================
+
   async getConnections() {
     return this.makeRequest<{ connections: TeamMemberProfile[] }>("/api/connections");
   }
@@ -260,7 +303,10 @@ class ApiService {
     });
   }
 
-  // Chat Methods
+  // ==============================================
+  // CHAT METHODS
+  // ==============================================
+
   async createConversation(targetUserId: string) {
     return this.makeRequest<{ id: string; participant_ids: string[]; participant_names: string[] }>("/api/conversations", {
       method: "POST",
@@ -287,12 +333,18 @@ class ApiService {
     return this.makeRequest<{ messages: Message[] }>(`/api/messages/${conversationId}?skip=${skip}&limit=${limit}`);
   }
 
-  // Health Check
+  // ==============================================
+  // HEALTH CHECK
+  // ==============================================
+
   async healthCheck() {
     return this.makeRequest<HealthCheckResponse>("/health");
   }
 
-  // Legacy Chat Methods (for existing Help component compatibility)
+  // ==============================================
+  // LEGACY CHAT METHODS
+  // ==============================================
+
   async sendChatMessage(message: ChatMessage) {
     return this.makeRequest<ChatResponse>("/chat", {
       method: "POST",
@@ -479,7 +531,7 @@ export interface UserActivityStats {
 // Team Finder Core Types
 export interface TeamSearchInput {
   required_skills: string[];
-  current_role?: string;  // Changed from preferred_role
+  current_role?: string;
   experience?: string;
   availability?: string;
   location?: string;
@@ -495,7 +547,7 @@ export interface TeamMemberProfile {
   role: string;
   skills: string[];
   interests: string[];
-  current_role: string;  // Changed from preferred_role
+  current_role: string;
   experience: string;
   availability: string;
   location: string;
