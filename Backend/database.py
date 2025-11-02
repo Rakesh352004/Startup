@@ -81,6 +81,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # =====================
 # FIXED Auth Helper Functions
 # =====================
+# =====================
+# Auth Helper Functions
+# =====================
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt directly"""
     try:
