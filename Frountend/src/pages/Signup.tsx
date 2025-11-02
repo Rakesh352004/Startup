@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, UserPlus } from "lucide-react";
+import { apiService } from "../services/api"; // Add this import
 
 const Signup: React.FC = () => {
   const navigate = useNavigate();
@@ -37,18 +38,19 @@ const Signup: React.FC = () => {
 
     setBusy(true);
     try {
-      const res = await fetch("http://localhost:8000/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, confirm_password: confirmPassword }),
+      // Use apiService instead of direct fetch
+      const response = await apiService.register({
+        name,
+        email,
+        password,
+        confirm_password: confirmPassword
       });
 
-      if (res.status === 201 || res.ok) {
+      if (response.data) {
         alert("Registration successful — please login");
         navigate("/signin", { replace: true });
       } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data.detail || "Registration failed");
+        setError(response.error || "Registration failed");
       }
     } catch (err) {
       console.error(err);

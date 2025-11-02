@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { Eye, EyeOff, LogIn, Sparkles, Zap, TrendingUp } from "lucide-react";
+import { apiService } from "../services/api"; // Add this import
 
 interface TokenPayload {
   sub: string;
@@ -19,17 +20,13 @@ const LoginPage: React.FC = () => {
     e.preventDefault();
     setBusy(true);
     try {
-      const res = await fetch("http://localhost:8000/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+      // Use apiService instead of direct fetch
+      const response = await apiService.login({ email, password });
 
-      if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem("token", data.access_token);
+      if (response.data) {
+        localStorage.setItem("token", response.data.access_token);
 
-        const decoded = jwtDecode<TokenPayload>(data.access_token);
+        const decoded = jwtDecode<TokenPayload>(response.data.access_token);
 
         if (decoded.role === "developer") {
           navigate("/dashboard");
@@ -37,8 +34,7 @@ const LoginPage: React.FC = () => {
           navigate("/home");
         }
       } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.detail || "Login failed");
+        alert(response.error || "Login failed");
       }
     } catch (err) {
       console.error(err);
