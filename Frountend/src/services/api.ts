@@ -235,17 +235,20 @@ class ApiService {
     return this.makeRequest<{ requests: ConnectionRequest[]; total: number }>("/api/connection-requests/sent");
   }
 
-  async respondToConnectionRequest(requestId: string, action: 'accept' | 'reject') {
-    return this.makeRequest<{ message: string }>(`/api/connection-requests/${requestId}/respond`, {
-      method: "POST",
+ async respondToConnectionRequest(requestId: string, action: 'accept' | 'reject') {
+    // Use the correct endpoint that exists in backend
+    return this.makeRequest<{ message: string; status: string }>(`/api/connection-requests/${requestId}`, {
+      method: "PUT", 
       body: JSON.stringify({ action }),
     });
   }
 
-  async checkConnectionStatus(targetUserId: string) {
-    return this.makeRequest<{ status: string }>(`/api/connection-status/${targetUserId}`);
+  // Debug endpoint to check connection status
+  async debugConnectionStatus(targetUserId: string) {
+    return this.makeRequest<any>(`/api/debug/connection-status/${targetUserId}`);
   }
 
+ 
   // Connection Management
   async getConnections() {
     return this.makeRequest<{ connections: TeamMemberProfile[] }>("/api/connections");

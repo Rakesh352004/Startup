@@ -194,21 +194,84 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
 
   const sendConnectionRequest = async (targetUserId: string) => {
     setProcessingRequests(prev => new Set(prev).add(targetUserId));
+    setError(null);
+    
+    console.log('🔄 Sending connection request to:', targetUserId);
     
     try {
       const response = await apiService.sendConnectionRequest(targetUserId, '');
+      console.log('✅ Connection request response:', response);
       
-      if (response.data) {
+      if (response.status === 200 && response.data) {
+        const newStatus = response.data.status === 'accepted' ? 'connected' : 'request_sent';
+        
+        console.log('📝 Updating profile status to:', newStatus);
+        
         setMatchedProfiles(prev => 
           prev.map(profile => 
             profile.id === targetUserId 
-              ? { ...profile, connection_status: 'request_sent' }
+              ? { ...profile, connection_status: newStatus }
               : profile
           )
         );
+        
+        if (newStatus === 'connected') {
+          console.log('🤝 Auto-accepted! Reloading connections...');
+          await loadConnectedUsers();
+        } else {
+          console.log('📤 Request sent successfully');
+        }
+        
+        // Show success message briefly
+        setError(null); // Clear any previous errors
+      } else if (response.status === 400) {
+        // Handle the case where request already exists
+        const errorMsg = response.error || '';
+        console.log('⚠️ Request already exists:', errorMsg);
+        
+        if (errorMsg.includes('already sent') || errorMsg.includes('already exist')) {
+          // Update UI to show request was already sent
+          setMatchedProfiles(prev => 
+            prev.map(profile => 
+              profile.id === targetUserId 
+                ? { ...profile, connection_status: 'request_sent' }
+                : profile
+            )
+          );
+          setError('Connection request already sent to this user');
+        } else if (errorMsg.includes('already connected')) {
+          setMatchedProfiles(prev => 
+            prev.map(profile => 
+              profile.id === targetUserId 
+                ? { ...profile, connection_status: 'connected' }
+                : profile
+            )
+          );
+          await loadConnectedUsers();
+          setError('You are already connected with this user');
+        } else {
+          setError(errorMsg);
+        }
+        
+        setTimeout(() => setError(null), 4000);
+      } else {
+        throw new Error(response.error || 'Request failed');
       }
     } catch (error: any) {
-      setError(error.response?.data?.detail || 'Failed to send connection request.');
+      console.error('❌ Connection request error:', error);
+      
+      const errorMessage = error.response?.data?.detail || 
+                          error.message || 
+                          'Failed to send connection request';
+      
+      console.log('📝 Error details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: errorMessage
+      });
+      
+      setError(errorMessage);
+      setTimeout(() => setError(null), 5000);
     } finally {
       setProcessingRequests(prev => {
         const newSet = new Set(prev);
@@ -217,7 +280,6 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
       });
     }
   };
-
   const respondToConnectionRequest = async (requestId: string, action: 'accept' | 'reject') => {
     setProcessingRequests(prev => new Set(prev).add(requestId));
     

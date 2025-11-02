@@ -21,7 +21,6 @@ from datetime import datetime
 import uuid
 import requests
 from collections import defaultdict
-from enhanced_realtime_chatbot import StartupGPSRealtimeChatbot, ChatMessage, ChatResponse
 import time
 
 from database import (
@@ -30,35 +29,35 @@ from database import (
     get_user_by_id, get_user_profile, update_user_profile, create_roadmap, 
     get_user_roadmaps, save_research, get_user_research_history, save_idea_validation, 
     get_user_ideas, get_user_activity, get_user_stats, delete_user_data,
+    connection_requests_collection, connections_collection,  # Add these
     
-    # Updated imports with corrected function names:
-    create_connection_request, 
+    # Use ONLY the _fixed versions:
+    create_connection_request,  # Remove the import, we'll define it inline
     get_connection_requests_fixed as get_connection_requests, 
     respond_to_connection_request_fixed as respond_to_connection_request,
     get_connection_status_fixed as get_connection_status, 
     get_connected_profiles_fixed as get_connected_profiles, 
     create_conversation_fixed as create_conversation, 
     send_message_fixed as send_message, 
-    get_messages_fixed as get_messages,disconnect_users  
+    get_messages_fixed as get_messages,
+    disconnect_users,
+    ObjectId  # Add this import
 )
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 
-from enhanced_realtime_chatbot import (
-    StartupGPSRealtimeChatbot, 
-    ChatMessage, 
-    ChatResponse,
-    get_chatbot_instance
-)
+
 _ss_last_request_time = 0
 _ss_request_lock = asyncio.Lock()
 # Load environment variables
 load_dotenv()
-
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+IS_PRODUCTION = ENVIRONMENT == "production"
 # ==========================================
 # CONSTANTS AND CONFIGURATION
 # ==========================================
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 DEVELOPER_EMAILS = {"ry352004@gmail.com"}
 JWT_SECRET = os.environ.get("JWT_SECRET", "fallback_secret")
@@ -79,25 +78,38 @@ team_searches_collection = db["team_searches"]
 app = FastAPI(
     title="Startup GPS API",
     description="Comprehensive API for startup validation, research, roadmaps, and team building",
-    version="2.0.0"
+    version="2.0.0",
+    docs_url="/docs" if not IS_PRODUCTION else None,  # Disable docs in production
+    redoc_url="/redoc" if not IS_PRODUCTION else None
 )
 
+
 # CORS Configuration
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001"
+]
+
+# Add production frontend URL if specified
+if FRONTEND_URL and FRONTEND_URL not in allowed_origins:
+    allowed_origins.append(FRONTEND_URL)
+
+# Add any additional production URLs from environment
+ADDITIONAL_ORIGINS = os.getenv("ADDITIONAL_CORS_ORIGINS", "")
+if ADDITIONAL_ORIGINS:
+    additional = [origin.strip() for origin in ADDITIONAL_ORIGINS.split(",")]
+    allowed_origins.extend(additional)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000", 
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001"
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
-
 )
-
 # Security - auto_error=False allows optional authentication
 security = HTTPBearer(auto_error=False)
 
@@ -307,47 +319,61 @@ def create_access_token_helper(subject: str, role: str = "user"):
 # Content filtering for harmful keywords
 # Replace the HARMFUL_KEYWORDS list (around line 330)
 HARMFUL_KEYWORDS = [
-    # Violence and weapons
-    'weapon', 'bomb', 'explosive', 'gun', 'knife', 'violence', 'kill', 'murder', 'assault',
-    'terrorism', 'terrorist', 'attack', 'harm', 'hurt', 'damage', 'destroy', 'firearms',
-    'ammunition', 'grenade', 'missile', 'warfare', 'combat', 'shooting',
+    # Explicit violence (not general security terms)
+    'build a bomb', 'make explosive', 'create weapon', 'assassination service',
+    'murder for hire', 'hit man', 'contract killing',
     
-    # Illegal substances
-    'drug dealer', 'cocaine', 'heroin', 'meth', 'illegal drugs', 'drug trafficking',
-    'drug cartel', 'smuggling', 'black market', 'narcotics', 'opium', 'fentanyl',
-    'crystal meth', 'marijuana trafficking', 'drug distribution',
+    # Illegal drugs (not medical/pharma)
+    'sell cocaine', 'sell heroin', 'drug trafficking', 'drug cartel',
+    'illegal drug distribution', 'narcotics smuggling',
     
-    # Fraud and scams
-    'ponzi scheme', 'pyramid scheme', 'scam', 'fraud', 'fake', 'counterfeit',
-    'money laundering', 'tax evasion', 'identity theft', 'credit card fraud',
-    'phishing', 'wire fraud', 'embezzlement', 'forgery', 'insurance fraud',
+    # Fraud (specific schemes, not general fraud detection)
+    'ponzi scheme', 'pyramid scheme operation', 'money laundering service',
+    'counterfeit money', 'fake documents service',
     
-    # Adult content
-    'pornography', 'adult content', 'sex work', 'escort service', 'strip club',
-    'sexual services', 'prostitution', 'brothel',
+    # Explicit adult content
+    'pornography production', 'escort service', 'prostitution ring',
     
-    # Gambling (in restricted contexts)
-    'illegal gambling', 'underground casino', 'betting scam', 'unlicensed gambling',
+    # Hacking (malicious intent, not security)
+    'hack into accounts', 'create malware', 'ransomware development',
+    'ddos attack service', 'sell exploits',
     
-    # Hate speech and discrimination
-    'hate speech', 'discrimination', 'racism', 'extremist', 'supremacy', 'genocide',
-    'ethnic cleansing', 'hate group', 'radicalization',
-    
-    # Hacking and cyber crimes
-    'hacking tools', 'malware creation', 'ransomware', 'ddos attack', 'data breach tools',
-    'exploit kit', 'botnet', 'keylogger', 'trojan development', 'zero-day exploit',
-    
-    # Other illegal activities
-    'human trafficking', 'organ trafficking', 'child exploitation', 'assassination',
-    'kidnapping', 'extortion', 'bribery', 'corruption scheme', 'illegal wildlife trade',
-    'endangered species trafficking', 'antiquities smuggling'
+    # Serious crimes
+    'human trafficking', 'child exploitation', 'organ trafficking',
+    'kidnapping service', 'extortion scheme',
 ]
 
 def is_harmful_content(text: str) -> bool:
-    """Check if the text contains harmful keywords or content"""
+    """Check if the text contains harmful keywords WITH context awareness"""
     text_lower = text.lower()
     
-    # Check for direct harmful keywords
+    # Positive context indicators (legitimate business use)
+    positive_indicators = [
+        'prevent', 'detect', 'protect', 'security', 'safety', 'defense',
+        'anti-', 'counter-', 'stop', 'fight', 'against', 'combat',
+        'awareness', 'education', 'research', 'study', 'analysis',
+        'cybersecurity', 'fraud detection', 'anti-fraud', 'firewall'
+    ]
+    
+    # Check if text has positive/legitimate context
+    has_positive_context = any(indicator in text_lower for indicator in positive_indicators)
+    
+    if has_positive_context:
+        # Only check for EXTREMELY explicit harmful patterns
+        explicit_harmful_patterns = [
+            r'\b(how to (make|build|create) (bomb|explosive|weapon))\b',
+            r'\b(sell (illegal drugs|weapons|stolen))\b',
+            r'\b(hack into|steal (money|identity))\b',
+            r'\b(distribute|traffic) (drugs|weapons|children)\b',
+        ]
+        
+        for pattern in explicit_harmful_patterns:
+            if re.search(pattern, text_lower):
+                return True
+        
+        return False  # Legitimate business context
+    
+    # For non-contextualized text, check harmful keywords
     for keyword in HARMFUL_KEYWORDS:
         if keyword in text_lower:
             return True
@@ -490,40 +516,368 @@ Provide ONLY the JSON response with no additional text."""
             status_code=500, 
             detail=f"Roadmap generation failed: {str(e)}"
         )
-def calculate_accurate_overall_score(scores: Dict[str, int]) -> int:
-    """Calculate more accurate overall score with proper weighting"""
+
+def is_valid_startup_idea(text: str) -> tuple[bool, str]:
+    """
+    STRICT validation to check if input is actually a startup idea
+    Returns: (is_valid, user_friendly_reason)
+    """
+    text_lower = text.lower().strip()
+    
+    # Check minimum length
+    if len(text) < 10:
+        return False, "Please provide more detail about your startup idea (at least 10 characters)"
+    
+    # Check for harmful/illegal content FIRST
+    if is_harmful_content(text):
+        return False, "This appears to contain inappropriate or illegal content. Please describe a legitimate business idea."
+    
+    # ===== STRICT REJECTION PATTERNS =====
+    
+    # 1. Personal activities (NOT business ideas)
+    personal_activity_patterns = [
+        r'\b(i want to|i will|i\'m going to|let me)\s+(steal|rob|take|grab)\b',
+        r'\b(go to|going to|watch|see)\s+(movie|cinema|theatre|theater)\b',
+        r'\b(eat|have|get)\s+(food|biryani|pizza|burger|lunch|dinner)\b',
+        r'\b(buy|purchase|get)\s+(phone|laptop|car|bike|clothes)\b',
+        r'\b(play|watch|listen to)\s+(game|music|video)\b',
+        r'\b(sleep|rest|relax|chill)\b',
+        r'\b(go\s+(home|out|shopping|traveling))\b',
+    ]
+    
+    for pattern in personal_activity_patterns:
+        if re.search(pattern, text_lower):
+            return False, "This sounds like a personal activity, not a business idea. Please describe what product or service you want to create for customers."
+    
+    # 2. Just greetings or casual chat
+    if re.search(r'^(hi|hello|hey|sup|yo|greetings|good\s+(morning|afternoon|evening))\s*[\!\?\.]*$', text_lower):
+        return False, "Please describe your startup idea instead of just greeting."
+    
+    # 3. Just personal introduction
+    if re.search(r'^(my\s+name\s+is|i\s+am|i\'m)\s+\w+\s*$', text_lower):
+        return False, "Please describe your business idea, not just your name."
+    
+    # 4. Test/sample inputs
+    if re.search(r'^(test|testing|sample|example|demo)\s*\d*\s*$', text_lower):
+        return False, "Please enter a real startup idea, not a test message."
+    
+    # 5. Just numbers or gibberish
+    if re.match(r'^\d+$', text_lower) or len(text_lower.split()) == 1:
+        return False, "Please provide a complete description of your startup idea."
+    
+    # 6. Questions without business context
+    question_patterns = [
+        r'^(what|how|why|when|where|who)\s',
+        r'^(can you|could you|will you)\s',
+        r'^(tell me|show me|give me)\s',
+    ]
+    
+    has_business_context = any(word in text_lower for word in [
+        'startup', 'business', 'company', 'product', 'service', 
+        'app', 'platform', 'solution', 'customers', 'market'
+    ])
+    
+    if not has_business_context:
+        for pattern in question_patterns:
+            if re.search(pattern, text_lower):
+                return False, "Please describe what business or product you want to create, not just ask a question."
+    
+    # ===== POSITIVE VALIDATION =====
+    
+    # Check for startup/business intent keywords
+    startup_indicators = [
+        # Core business terms
+        'platform', 'app', 'application', 'service', 'product', 'business',
+        'startup', 'company', 'solution', 'system', 'marketplace', 'website',
+        'software', 'tool', 'device', 'technology', 'digital',
+        
+        # Business actions
+        'connect', 'help', 'enable', 'provide', 'offer', 'build', 'create',
+        'develop', 'sell', 'rent', 'deliver', 'manufacture', 'design',
+        'teach', 'train', 'consult', 'manage', 'organize',
+        
+        # Customer/market terms
+        'customers', 'users', 'clients', 'market', 'industry', 'consumers',
+        
+        # Business structure words
+        'revenue', 'profit', 'subscription', 'monetize', 'pricing'
+    ]
+    
+    keyword_count = sum(1 for keyword in startup_indicators if keyword in text_lower)
+    
+    # Need at least 1 business keyword OR clear business intent phrases
+    business_intent_phrases = [
+        'i want to create', 'i plan to build', 'we will develop',
+        'business idea', 'startup idea', 'my idea is',
+        'looking to create', 'trying to build', 'aiming to develop',
+        'platform for', 'app for', 'service for', 'product for'
+    ]
+    
+    has_business_intent = any(phrase in text_lower for phrase in business_intent_phrases)
+    
+    if keyword_count < 1 and not has_business_intent:
+        return False, "This doesn't appear to be a business idea. Please describe what product/service you want to create, who your customers are, and what problem you're solving."
+    
+    # Passed all checks
+    return True, "Valid startup idea"
+
+
+def call_groq_validation_enhanced(prompt: str) -> dict:
+    """Enhanced validation with STRICT pre-filtering"""
+    
+    # ===== STEP 1: STRICT PRE-VALIDATION =====
+    is_valid, reason = is_valid_startup_idea(prompt)
+    if not is_valid:
+        # Return immediate rejection with clear explanation
+        raise HTTPException(
+            status_code=400,
+            detail=reason
+        )
+    
+    # ===== STEP 2: Check for harmful content =====
+    if is_harmful_content(prompt):
+        raise HTTPException(
+            status_code=400,
+            detail="This content appears inappropriate for business validation. Please describe a legitimate, legal business idea."
+        )
+    
+    # ===== STEP 3: Minimum quality check =====
+    if len(prompt.strip()) < 30:
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide more detail (at least 30 characters). Include: what you're building, who it's for, and what problem it solves."
+        )
+    
+    # ===== STEP 4: Proceed with AI validation =====
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured")
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    system_prompt = """You are an expert startup validator with 15+ years of experience.
+
+### CRITICAL: REJECT NON-BUSINESS IDEAS IMMEDIATELY
+
+If the input is:
+- A personal activity (going to movies, eating food, buying things for personal use)
+- A greeting or casual chat
+- A question without business context
+- Gibberish or test input
+- Anything illegal or harmful
+
+Return this JSON with score 15:
+{
+  "overall_score": 15,
+  "scores": {"feasibility": 15, "market_demand": 15, "uniqueness": 15, "strength": 15, "risk_factors": 95},
+  "analysis": {
+    "verdict": "This does not appear to be a business idea. Please describe a product or service you want to create for customers.",
+    "feasibility": "Cannot assess - not a business concept",
+    "market_demand": "Cannot assess - not a business concept",
+    "uniqueness": "Cannot assess - not a business concept",
+    "strength": "Cannot assess - not a business concept",
+    "risk_factors": "Invalid input - not a business idea",
+    "risk_mitigation": "Please provide a legitimate business concept",
+    "existing_competitors": "Not applicable"
+  },
+  "suggestions": {
+    "critical": ["Describe what product/service you want to create", "Identify your target customers", "Explain what problem you're solving"],
+    "recommended": ["Research similar businesses in your target market", "Define your unique value proposition"],
+    "optional": ["Consider creating a business plan", "Validate your idea with potential customers"]
+  }
+}
+
+### FOR REAL STARTUP IDEAS:
+
+Apply your full expertise with REALISTIC scoring:
+
+**Market Demand Scoring**:
+- 85-100: Revolutionary unmet need, massive TAM ($10B+)
+- 70-84: Strong demand, growing market ($1B+)
+- 55-69: Moderate demand, niche market
+- 40-54: Limited demand, saturated market
+- 15-39: Very low demand, commodity product
+
+**Response Format**:
+{
+  "overall_score": <15-100>,
+  "scores": {
+    "feasibility": <15-100>,
+    "market_demand": <15-100>,
+    "uniqueness": <15-100>,
+    "strength": <15-100>,
+    "risk_factors": <15-100>
+  },
+  "analysis": {
+    "verdict": "Honest 3-4 sentence assessment...",
+    "feasibility": "Detailed technical analysis...",
+    "market_demand": "Market reality with data...",
+    "uniqueness": "True differentiation...",
+    "strength": "Core value proposition...",
+    "risk_factors": "Honest risks...",
+    "risk_mitigation": "Practical strategies...",
+    "existing_competitors": "CompanyName1 (domain.com), CompanyName2 (domain.com)"
+  },
+  "suggestions": {
+    "critical": ["Must-do items"],
+    "recommended": ["Should-do items"],
+    "optional": ["Nice-to-haves"]
+  }
+}"""
+
+    user_prompt = f"""Analyze this input with BRUTAL HONESTY:
+
+"{prompt}"
+
+First: Is this actually a BUSINESS IDEA (product/service for customers)?
+If NO → return score 15 with explanation
+If YES → analyze thoroughly with realistic scoring"""
+
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0.3,
+        "max_tokens": 4000
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail="Validation service error")
+
+        data = response.json()
+        ai_text = data["choices"][0]["message"]["content"].strip()
+        
+        # Clean and parse
+        if ai_text.startswith("```json"):
+            ai_text = ai_text[7:]
+        if ai_text.endswith("```"):
+            ai_text = ai_text[:-3]
+        ai_text = ai_text.strip()
+        
+        try:
+            result = json.loads(ai_text)
+        except json.JSONDecodeError:
+            result = parse_fallback_response(ai_text)
+        
+        # Apply realistic overall scoring
+        overall_score = calculate_realistic_overall_score(result.get("scores", {}), prompt)
+        result["overall_score"] = overall_score
+        
+        # Validate structure
+        if not validate_response_structure(result):
+            result = fix_response_structure(result)
+        
+        # Enhance competitors
+        result = enhance_competitor_analysis(result)
+        
+        logger.info(f"✅ Validation complete - Score: {overall_score}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Validation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
+
+
+def calculate_realistic_overall_score(scores: Dict[str, int], prompt: str) -> int:
+    """
+    Calculate realistic overall score with context-aware adjustments
+    """
+    # Base weighted calculation
     weights = {
-        'feasibility': 0.25,      # 25% - Can it be built?
-        'market_demand': 0.30,    # 30% - Is there demand? (most important)
-        'uniqueness': 0.20,       # 20% - How unique is it?
-        'strength': 0.15,         # 15% - Core advantages
-        'risk_factors': 0.10      # 10% - Risk assessment (inverted)
+        'feasibility': 0.25,
+        'market_demand': 0.35,      # Increased weight - most important
+        'uniqueness': 0.20,
+        'strength': 0.15,
+        'risk_factors': 0.05
     }
     
-    # Calculate weighted average
     weighted_sum = 0
     for dimension, weight in weights.items():
-        score = scores.get(dimension, 70)
-        # For risk_factors, invert the score (lower risk = higher contribution)
+        score = scores.get(dimension, 50)
         if dimension == 'risk_factors':
-            # Convert risk score to contribution score
-            contribution_score = max(0, 100 - score + 50)  # Invert and normalize
+            contribution_score = max(0, 100 - score + 50)
             weighted_sum += contribution_score * weight
         else:
             weighted_sum += score * weight
     
-    # Ensure score is within valid range
-    overall_score = max(0, min(100, int(weighted_sum)))
+    overall_score = int(weighted_sum)
     
-    # Apply additional logic for extreme cases
-    if any(scores.get(key, 70) < 30 for key in ['feasibility', 'market_demand']):
-        overall_score = min(overall_score, 45)  # Cap at 45 if critical areas are very weak
+    # Context-aware adjustments based on idea quality
+    prompt_lower = prompt.lower()
     
+    # PENALTY for oversaturated/commodity markets (-15 to -25 points)
+    oversaturated_keywords = [
+        'umbrella rent', 'umbrella rental', 'rent umbrella',
+        'generic marketplace', 'another uber', 'uber for', 
+        'tinder for', 'airbnb for', 'facebook for',
+        'simple website', 'basic app', 'standard platform'
+    ]
+    
+    for keyword in oversaturated_keywords:
+        if keyword in prompt_lower:
+            overall_score -= 20
+            break
+    
+    # PENALTY for weak differentiation (-10 points)
+    weak_differentiation = [
+        'everyone has', 'commonly available', 'already exists',
+        'nothing new', 'not unique', 'standard service'
+    ]
+    
+    if any(phrase in prompt_lower for phrase in weak_differentiation):
+        overall_score -= 10
+    
+    # PENALTY if market demand is very low (<40)
+    if scores.get('market_demand', 70) < 40:
+        overall_score -= 15
+    
+    # PENALTY if feasibility is very low (<35)
+    if scores.get('feasibility', 70) < 35:
+        overall_score -= 10
+    
+    # BONUS for innovative/emerging tech (+10 to +15 points)
+    innovative_keywords = [
+        'ai', 'machine learning', 'blockchain', 'quantum',
+        'vr', 'ar', 'metaverse', 'web3', 'crypto',
+        'biotech', 'nanotech', 'renewable energy', 'sustainable'
+    ]
+    
+    if any(keyword in prompt_lower for keyword in innovative_keywords):
+        overall_score += 12
+    
+    # BONUS for solving real pain points (+8 points)
+    pain_point_indicators = [
+        'painful', 'frustrating', 'difficult', 'time-consuming',
+        'expensive', 'inefficient', 'complicated', 'hard to'
+    ]
+    
+    if any(indicator in prompt_lower for indicator in pain_point_indicators):
+        overall_score += 8
+    
+    # Critical checks - cap score if fundamentals are weak
+    if scores.get('market_demand', 70) < 30:
+        overall_score = min(overall_score, 35)
+    
+    if scores.get('feasibility', 70) < 25:
+        overall_score = min(overall_score, 40)
+    
+    if all(scores.get(key, 70) < 45 for key in ['feasibility', 'market_demand', 'uniqueness']):
+        overall_score = min(overall_score, 45)
+    
+    # Boost if all dimensions are strong (85+)
     if all(scores.get(key, 70) >= 85 for key in weights.keys()):
-        overall_score = max(overall_score, 85)  # Boost if all areas are excellent
+        overall_score = max(overall_score, 85)
     
-    return overall_score
-
+    # Final bounds
+    return max(15, min(100, overall_score))
 def call_groq_chat_with_idea(message: str, idea_context: str, session_id: str) -> str:
     """Enhanced chat function for idea-specific conversations"""
     
@@ -864,181 +1218,21 @@ def parse_fallback_response(text: str) -> dict:
     
     return enhance_competitor_analysis(result)
 
-# REPLACE your existing call_groq_validation function with this enhanced version:
-def call_groq_validation_enhanced(prompt: str) -> dict:
-    """Enhanced validation function with content filtering and accurate scoring"""
-    
-    # Check for harmful content
-    if is_harmful_content(prompt):
-        raise HTTPException(
-            status_code=400,
-            detail="Please enter a valid and appropriate startup idea. The content provided contains inappropriate elements."
-        )
-    
-    # Validate minimum quality
-    if len(prompt.strip()) < 30:
-        raise HTTPException(
-            status_code=400,
-            detail="Please provide a more detailed description (at least 30 characters) for accurate validation."
-        )
-    
-    if not GROQ_API_KEY:
-        raise HTTPException(
-            status_code=500, 
-            detail="GROQ_API_KEY environment variable is not set."
-        )
 
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    # Use your existing system_prompt from call_groq_validation
-    system_prompt = """You are an AI Startup Validator for "Startup GPS". 
-Your role is to provide dynamic, detailed, and actionable startup validation reports based on the user's idea. 
-Do not use any static or placeholder data. Always analyze the user's input deeply.
-
-### Instructions:
-1. Analyze the startup idea comprehensively across these dimensions:
-   - **Overall Validation Score (0-100%)**
-   - **Feasibility** (technical & operational)
-   - **Market Demand**
-   - **Uniqueness / Differentiation**
-   - **Strengths**
-   - **Risk Factors**
-
-2. For each dimension:
-   - Give a **score (0-100)**  
-   - Write a **detailed explanation** with specific insights relevant to the idea.
-
-3. Provide three clear sections of suggestions:
-   - **Critical Improvements (must-do fixes)** – 3 to 5 items
-   - **Recommended Enhancements (should-do improvements)** – 3 to 5 items
-   - **Optional Considerations (nice-to-have ideas)** – 2 to 4 items
-
-4. Add detailed analysis for each dimension:
-   - Feasibility (timeline, complexity, scalability)
-   - Market Demand (target audience, adoption signals, growth potential)
-   - Uniqueness (differentiation vs competitors, barriers to entry)
-   - Strength (value proposition, monetization, scalability potential)
-   - Risk Factors (competition, adoption, finance, tech)
-   - Risk Mitigation (specific strategies to address risks)
-   - Existing Competitors (real names where possible, differentiation opportunities)
-
-5. Always adapt output **directly to the user's startup idea**.
-   - Do NOT give generic or repeated responses.
-   - Each section must be grounded in the specific industry/domain of the idea.
-   - Avoid filler text.
-
-6. When listing competitors, format them as:
-   "CompanyName1 (website1.com), CompanyName2 (website2.com), CompanyName3 (website3.com)"
-
-### Response Format (JSON):
-{
-  "overall_score": 85,
-  "scores": {
-    "feasibility": 78,
-    "market_demand": 82,
-    "uniqueness": 65,
-    "strength": 81,
-    "risk_factors": 74
-  },
-  "analysis": {
-    "verdict": "Detailed overall assessment...",
-    "feasibility": "Technical and operational analysis...",
-    "market_demand": "Market size, audience, adoption potential...",
-    "uniqueness": "Differentiation analysis...",
-    "strength": "Core advantages and value proposition...",
-    "risk_factors": "Key risks and mitigation strategies...",
-    "risk_mitigation": "Strategic risk mitigation approaches...",
-    "existing_competitors": "Real competitor analysis with Company1 (domain1.com), Company2 (domain2.com)..."
-  },
-  "suggestions": {
-    "critical": ["Item 1", "Item 2", "Item 3"],
-    "recommended": ["Item 1", "Item 2", "Item 3"],
-    "optional": ["Item 1", "Item 2"]
-  }
-}
-
-Provide ONLY the JSON response with no additional text."""
-
-    user_prompt = f"""Please validate this startup idea comprehensively with proper competitor formatting: {prompt}
-
-IMPORTANT: When listing competitors in the existing_competitors section, format them as:
-"CompanyName1 (website1.com), CompanyName2 (website2.com), CompanyName3 (website3.com)"
-
-This format is critical for the frontend to create clickable company bubbles. Include as many relevant competitors as possible with their websites."""
-
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        "temperature": 0.2,  # Lower temperature for more consistent scoring
-        "max_tokens": 4000
-    }
-
-    try:
-        logger.info("Sending request to GROQ API...")
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
-        
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=response.status_code, 
-                detail=f"GROQ API error: {response.text}"
-            )
-
-        data = response.json()
-        ai_text = data["choices"][0]["message"]["content"].strip()
-        
-        # Clean JSON response
-        if ai_text.startswith("```json"):
-            ai_text = ai_text[7:]
-        if ai_text.endswith("```"):
-            ai_text = ai_text[:-3]
-        ai_text = ai_text.strip()
-        
-        # Parse JSON response
-        try:
-            result = json.loads(ai_text)
-        except json.JSONDecodeError:
-            result = parse_fallback_response(ai_text)  # Use your existing function
-        
-        # Calculate accurate overall score
-        overall_score = calculate_accurate_overall_score(result.get("scores", {}))
-        result["overall_score"] = overall_score
-        
-        # Validate and enhance result structure (use your existing functions)
-        if not validate_response_structure(result):
-            result = fix_response_structure(result)
-        
-        # Enhance competitor analysis (use your existing function)
-        result = enhance_competitor_analysis(result)
-        
-        return result
-        
-    except Exception as e:
-        logger.error(f"Validation error: {e}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Validation processing failed: {str(e)}"
-        )
 
 # ADD THESE NEW API ENDPOINTS:
 
 @app.post("/validate-idea-enhanced")
 async def validate_idea_enhanced(idea: IdeaInput, current_user=Depends(get_optional_current_user)):
-    """Enhanced idea validation with content filtering and accurate scoring"""
-    logger.info(f"Enhanced validation request: {idea.prompt[:50]}...")
+    """Enhanced idea validation with better understanding and scoring"""
+    logger.info(f"🔍 Validation request: {idea.prompt[:50]}...")
     
     try:
         # Get AI validation with enhanced features
         ai_result = call_groq_validation_enhanced(idea.prompt)
-        logger.info("Enhanced AI validation completed")
+        logger.info(f"✅ AI validation complete - Score: {ai_result['overall_score']}")
         
-        # Structure the response (same as your existing code)
+        # Structure the response
         validation_response = ValidationResponse(
             prompt=idea.prompt,
             validation=ValidationDetails(
@@ -1048,7 +1242,7 @@ async def validate_idea_enhanced(idea: IdeaInput, current_user=Depends(get_optio
                 uniqueness=ai_result["analysis"]["uniqueness"],
                 strength=ai_result["analysis"]["strength"],
                 riskFactors=ai_result["analysis"]["risk_factors"],
-                riskMitigation=ai_result["analysis"].get("risk_mitigation", "Strategic risk mitigation recommended."),
+                riskMitigation=ai_result["analysis"].get("risk_mitigation", ""),
                 existingCompetitors=ai_result["analysis"]["existing_competitors"],
                 competitors=[
                     CompetitorInfo(name=comp["name"], url=comp["url"]) 
@@ -1071,27 +1265,56 @@ async def validate_idea_enhanced(idea: IdeaInput, current_user=Depends(get_optio
             created_at=datetime.utcnow()
         )
         
-        # Save to database if user is authenticated (your existing logic)
+        # ✅ FIXED: Save to database if user is authenticated
         if current_user:
             try:
                 user_id = str(current_user["_id"])
+                logger.info(f"💾 Saving validation for user: {user_id}")
+                
+                # Prepare data for database
                 idea_data = {
                     "prompt": idea.prompt,
-                    "validation": validation_response.validation.dict(),
-                    "scores": validation_response.scores.dict(),
-                    "suggestions": validation_response.suggestions.dict()
+                    "validation": {
+                        "verdict": ai_result["analysis"]["verdict"],
+                        "feasibility": ai_result["analysis"]["feasibility"],
+                        "marketDemand": ai_result["analysis"]["market_demand"],
+                        "uniqueness": ai_result["analysis"]["uniqueness"],
+                        "strength": ai_result["analysis"]["strength"],
+                        "riskFactors": ai_result["analysis"]["risk_factors"],
+                        "riskMitigation": ai_result["analysis"].get("risk_mitigation", ""),
+                        "existingCompetitors": ai_result["analysis"]["existing_competitors"]
+                    },
+                    "scores": {
+                        "overall": ai_result["overall_score"],
+                        "feasibility": ai_result["scores"]["feasibility"],
+                        "marketDemand": ai_result["scores"]["market_demand"],
+                        "uniqueness": ai_result["scores"]["uniqueness"],
+                        "strength": ai_result["scores"]["strength"],
+                        "riskFactors": ai_result["scores"]["risk_factors"]
+                    },
+                    "suggestions": {
+                        "critical": ai_result["suggestions"]["critical"],
+                        "recommended": ai_result["suggestions"]["recommended"],
+                        "optional": ai_result["suggestions"]["optional"]
+                    }
                 }
+                
+                # Save to database
                 saved_id = save_idea_validation(user_id, idea_data)
-                logger.info(f"Enhanced idea saved with ID: {saved_id}")
+                logger.info(f"✅ Idea saved successfully with ID: {saved_id}")
+                
             except Exception as e:
-                logger.error(f"Database save error: {e}")
+                logger.error(f"❌ Database save error: {e}")
+                # Don't fail the request, just log the error
+        else:
+            logger.info("👤 Anonymous user - skipping database save")
         
         return validation_response
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Enhanced validation failed: {e}")
+        logger.error(f"❌ Validation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
 
 @app.post("/chat-with-idea")
@@ -2028,7 +2251,152 @@ def calculate_match_score_and_details(profile: dict, requirements: dict) -> tupl
     
     final_score = min(100, max(0, int(score)))
     return final_score, matched_skills, matched_interests
-
+# ==========================================
+# CONNECTION REQUEST HELPER (Override database.py version)
+# ==========================================
+def create_connection_request_api(sender_id: str, receiver_id: str, message: str = "") -> str:
+    """
+    API-specific connection request handler with detailed logging and error handling
+    """
+    try:
+        logger.info(f"🔍 Connection request: {sender_id} -> {receiver_id}")
+        
+        sender_oid = ObjectId(sender_id)
+        receiver_oid = ObjectId(receiver_id)
+        
+        # 1. Prevent self-connection
+        if sender_id == receiver_id:
+            logger.warning(f"❌ Self-connection attempt: {sender_id}")
+            raise ValueError("Cannot send request to yourself")
+        
+        # 2. Check if already connected
+        existing_connection = connections_collection.find_one({
+            "$or": [
+                {"user_id": sender_oid, "target_user_id": receiver_oid, "status": "connected"},
+                {"user_id": receiver_oid, "target_user_id": sender_oid, "status": "connected"}
+            ]
+        })
+        
+        if existing_connection:
+            logger.warning(f"❌ Already connected: {sender_id} <-> {receiver_id}")
+            raise ValueError("Already connected with this user")
+        
+        # 3. Check for pending requests (both directions)
+        existing_request = connection_requests_collection.find_one({
+            "$or": [
+                {"sender_id": sender_oid, "receiver_id": receiver_oid, "status": "pending"},
+                {"sender_id": receiver_oid, "receiver_id": sender_oid, "status": "pending"}
+            ]
+        })
+        
+        if existing_request:
+            # If receiver already sent a request to sender, auto-accept
+            if str(existing_request["sender_id"]) == receiver_id:
+                logger.info(f"✅ Auto-accepting mutual request: {receiver_id} -> {sender_id}")
+                
+                connection_requests_collection.update_one(
+                    {"_id": existing_request["_id"]},
+                    {"$set": {"status": "accepted", "updated_at": datetime.utcnow()}}
+                )
+                
+                # Create bidirectional connections
+                connections_collection.insert_one({
+                    "user_id": sender_oid,
+                    "target_user_id": receiver_oid,
+                    "status": "connected",
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow()
+                })
+                
+                connections_collection.insert_one({
+                    "user_id": receiver_oid,
+                    "target_user_id": sender_oid,
+                    "status": "connected",
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow()
+                })
+                
+                return str(existing_request["_id"])
+            else:
+                logger.warning(f"❌ Request already sent: {sender_id} -> {receiver_id}")
+                logger.info(f"📋 Existing request ID: {existing_request['_id']}, Status: {existing_request['status']}")
+                raise ValueError("Connection request already sent")
+        
+        # 4. Check for ANY existing request (including rejected/accepted)
+        any_existing = connection_requests_collection.find_one({
+            "$or": [
+                {"sender_id": sender_oid, "receiver_id": receiver_oid},
+                {"sender_id": receiver_oid, "receiver_id": sender_oid}  # Check both directions
+            ]
+        })
+        
+        if any_existing:
+            logger.info(f"📋 Found existing request with status: {any_existing['status']}")
+            
+            if any_existing["status"] == "rejected":
+                # Check if 24 hours have passed
+                rejection_time = any_existing.get("updated_at", any_existing.get("created_at"))
+                if rejection_time:
+                    hours_since = (datetime.utcnow() - rejection_time).total_seconds() / 3600
+                    if hours_since < 24:
+                        logger.warning(f"❌ Too soon after rejection: {int(24 - hours_since)} hours remaining")
+                        raise ValueError(f"Please wait {int(24 - hours_since)} hours before sending another request")
+                
+                # Delete old rejected request
+                logger.info(f"🗑️ Deleting old rejected request: {any_existing['_id']}")
+                connection_requests_collection.delete_one({"_id": any_existing["_id"]})
+            
+            elif any_existing["status"] == "accepted":
+                # ✅ CRITICAL FIX: If request is accepted but no connection exists, 
+                # it means they disconnected - delete the old request
+                logger.warning(f"⚠️ Found accepted request but no connection - cleaning up orphaned request")
+                logger.info(f"🗑️ Deleting orphaned accepted request: {any_existing['_id']}")
+                connection_requests_collection.delete_one({"_id": any_existing["_id"]})
+                # Now continue to create a new request below
+            
+            elif any_existing["status"] == "pending":
+                logger.warning(f"❌ Request already pending: {any_existing['_id']}")
+                raise ValueError("Connection request already sent")
+        
+        # 5. Create new request
+        request_doc = {
+            "sender_id": sender_oid,
+            "receiver_id": receiver_oid,
+            "message": message,
+            "status": "pending",
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+        
+        try:
+            result = connection_requests_collection.insert_one(request_doc)
+            logger.info(f"✅ Connection request created: {result.inserted_id}")
+            return str(result.inserted_id)
+        except errors.DuplicateKeyError as e:
+            logger.error(f"❌ Duplicate key error: {e}")
+            # The request exists but we didn't catch it above - find and return it
+            existing = connection_requests_collection.find_one({
+                "$or": [
+                    {"sender_id": sender_oid, "receiver_id": receiver_oid},
+                    {"sender_id": receiver_oid, "receiver_id": sender_oid}
+                ]
+            })
+            if existing:
+                logger.info(f"📋 Found existing request after duplicate error: {existing['_id']}")
+                # Delete it and retry
+                connection_requests_collection.delete_one({"_id": existing["_id"]})
+                logger.info(f"🗑️ Deleted duplicate request, retrying...")
+                # Retry insertion
+                result = connection_requests_collection.insert_one(request_doc)
+                logger.info(f"✅ Connection request created on retry: {result.inserted_id}")
+                return str(result.inserted_id)
+            raise ValueError("Failed to create connection request due to duplicate")
+        
+    except ValueError:
+        raise  # Re-raise ValueError for API handling
+    except Exception as e:
+        logger.error(f"❌ Connection request failed: {e}")
+        raise ValueError(f"Failed to create connection request: {str(e)}")
 
 
 
@@ -2623,11 +2991,13 @@ def root():
         "message": "Startup GPS API is running successfully!",
         "status": "healthy",
         "version": "2.0.0",
+        "environment": ENVIRONMENT,
         "features": [
             "Idea Validation",
             "Research Papers",
             "Roadmap Generation", 
-            "User Management"
+            "User Management",
+            "Team Finder"
         ]
     }
 
@@ -2635,9 +3005,10 @@ def root():
 def health_check():
     return {
         "status": "healthy",
+        "environment": ENVIRONMENT,
         "timestamp": datetime.utcnow().isoformat(),
         "services": {
-            "database": "connected",
+            "database": "connected" if db else "error",
             "groq_api": "configured" if GROQ_API_KEY else "not_configured",
             "semantic_scholar": "configured" if SEMANTIC_SCHOLAR_API_KEY else "not_configured"
         }
@@ -2785,27 +3156,75 @@ async def search_team_members(search_input: TeamSearchInput, current_user=Depend
 
 @app.post("/api/connection-requests")
 async def send_connection_request_api(request_data: ConnectionRequestInput, current_user=Depends(get_current_user)):
-    """Send connection request"""
+    """Send connection request with detailed logging and error handling"""
     try:
         sender_id = str(current_user["_id"])
         receiver_id = request_data.receiver_id
         
+        logger.info(f"📤 Connection request: sender={sender_id} -> receiver={receiver_id}")
+        logger.info(f"📧 Sender email: {current_user.get('email')}")
+        
+        # Validate receiver_id format
+        if not receiver_id or len(receiver_id) != 24:
+            logger.error(f"❌ Invalid receiver ID format: {receiver_id}")
+            raise HTTPException(status_code=400, detail="Invalid user ID format")
+        
         # Check if receiver exists
-        receiver = get_user_by_id(receiver_id)
-        if not receiver:
+        try:
+            receiver = get_user_by_id(receiver_id)
+            if not receiver:
+                logger.error(f"❌ Receiver not found: {receiver_id}")
+                raise HTTPException(status_code=404, detail="User not found")
+            logger.info(f"✅ Receiver found: {receiver.get('email')}")
+        except Exception as e:
+            logger.error(f"❌ Error checking receiver: {e}")
             raise HTTPException(status_code=404, detail="User not found")
         
-        if sender_id == receiver_id:
-            raise HTTPException(status_code=400, detail="Cannot send request to yourself")
+        # Use the API-specific function (not the database.py one)
+        try:
+            request_id = create_connection_request_api(sender_id, receiver_id, request_data.message)
+            
+            logger.info(f"✅ Connection request created: {request_id}")
+            logger.info(f"📊 Request saved in database")
+            
+            # Verify it was saved
+            saved_request = connection_requests_collection.find_one({"_id": ObjectId(request_id)})
+            if saved_request:
+                logger.info(f"✅ Verified: Request {request_id} exists in database")
+                logger.info(f"   Status: {saved_request.get('status')}")
+                logger.info(f"   Sender: {saved_request.get('sender_id')}")
+                logger.info(f"   Receiver: {saved_request.get('receiver_id')}")
+            else:
+                logger.error(f"❌ Request {request_id} NOT found in database!")
+            
+            return {
+                "request_id": request_id,
+                "status": "sent",
+                "message": "Connection request sent successfully"
+            }
+            
+        except ValueError as e:
+            error_msg = str(e)
+            logger.warning(f"⚠️ Validation error: {error_msg}")
+            
+            # Map errors to status codes
+            if "already sent" in error_msg.lower():
+                raise HTTPException(status_code=400, detail="Connection request already sent")
+            elif "already connected" in error_msg.lower():
+                raise HTTPException(status_code=400, detail="Already connected with this user")
+            elif "wait" in error_msg.lower() and "hours" in error_msg.lower():
+                raise HTTPException(status_code=429, detail=error_msg)
+            elif "yourself" in error_msg.lower():
+                raise HTTPException(status_code=400, detail="Cannot send request to yourself")
+            else:
+                raise HTTPException(status_code=400, detail=error_msg)
         
-        request_id = create_connection_request(sender_id, receiver_id, request_data.message)
-        
-        return {"request_id": request_id, "status": "sent"}
-        
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to send request")
+        logger.error(f"❌ Unexpected error in connection request: {e}")
+        logger.exception(e)  # Full stack trace
+        raise HTTPException(status_code=500, detail="Failed to send connection request")
 
 @app.get("/api/connection-requests/received")
 async def get_received_requests(current_user=Depends(get_current_user)):
@@ -2818,27 +3237,61 @@ async def get_received_requests(current_user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Failed to get requests")
 
 @app.post("/api/connection-requests/{request_id}/respond")
-async def respond_to_request(
-    request_id: str, 
-    response_data: ConnectionResponseInput, 
-    current_user=Depends(get_current_user)
-):
-    """Accept or reject connection request"""
+async def respond_to_request_api(request_id: str, response_data: ConnectionResponseInput, current_user=Depends(get_current_user)):
+    """Respond to connection request with enhanced error handling"""
     try:
         user_id = str(current_user["_id"])
-        
-        if response_data.action not in ["accept", "reject"]:
-            raise HTTPException(status_code=400, detail="Invalid action")
+        logger.info(f"📨 Response to request {request_id}: {response_data.action} by user {user_id}")
         
         success = respond_to_connection_request(request_id, response_data.action, user_id)
         
         if not success:
-            raise HTTPException(status_code=400, detail="Failed to process request")
+            raise HTTPException(status_code=400, detail="Failed to process request response")
         
-        return {"message": f"Request {response_data.action}ed successfully"}
+        action_text = "accepted" if response_data.action == "accept" else "rejected"
+        logger.info(f"✅ Request {request_id} {action_text}")
         
+        return {
+            "message": f"Connection request {action_text} successfully",
+            "status": action_text
+        }
+        
+    except ValueError as e:
+        logger.error(f"❌ Validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to respond")
+        logger.error(f"❌ Unexpected error responding to request: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process connection request")
+@app.put("/api/connection-requests/{request_id}")
+async def respond_to_request_api(
+    request_id: str, 
+    response_data: ConnectionResponseInput, 
+    current_user=Depends(get_current_user)
+):
+    """Respond to connection request - PUT endpoint"""
+    try:
+        user_id = str(current_user["_id"])
+        logger.info(f"📨 Responding to request {request_id}: {response_data.action} by user {user_id}")
+        
+        success = respond_to_connection_request(request_id, response_data.action, user_id)
+        
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to process connection request")
+        
+        action_text = "accepted" if response_data.action == "accept" else "rejected"
+        logger.info(f"✅ Request {request_id} {action_text} successfully")
+        
+        return {
+            "message": f"Connection request {action_text} successfully",
+            "status": action_text
+        }
+        
+    except ValueError as e:
+        logger.error(f"❌ Validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ Error responding to request: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process connection request")
 
 @app.get("/api/connection-status/{target_user_id}")
 async def check_connection_status_api(target_user_id: str, current_user=Depends(get_current_user)):
@@ -2849,7 +3302,22 @@ async def check_connection_status_api(target_user_id: str, current_user=Depends(
         return {"status": status}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to check status")
-
+# Add this temporary endpoint to main.py
+@app.delete("/api/debug/delete-request/{sender_id}/{receiver_id}")
+async def delete_duplicate_request(sender_id: str, receiver_id: str, current_user=Depends(get_current_user)):
+    """Debug: Delete a specific connection request"""
+    try:
+        result = connection_requests_collection.delete_one({
+            "sender_id": ObjectId(sender_id),
+            "receiver_id": ObjectId(receiver_id)
+        })
+        
+        return {
+            "deleted": result.deleted_count > 0,
+            "count": result.deleted_count
+        }
+    except Exception as e:
+        return {"error": str(e)}
 @app.get("/api/connections")
 async def get_connections_api(current_user=Depends(get_current_user)):
     """Get connected users"""
@@ -2943,72 +3411,6 @@ async def disconnect_user(target_user_id: str, current_user=Depends(get_current_
 # CHATBOT ENDPOINTS SETUP (FIXED)
 # ==============================================
 
-chatbot = get_chatbot_instance()
-
-# Replace existing chat endpoints with:
-@app.post("/chat/message", response_model=ChatResponse)
-async def chat_message(
-    message_data: ChatMessage,
-    current_user=Depends(get_optional_current_user)
-):
-    user_id = str(current_user["_id"]) if current_user else None
-    
-    result = await chatbot.process_message(
-        message_data.message,
-        message_data.session_id or str(uuid.uuid4()),
-        user_id
-    )
-    
-    return ChatResponse(
-        reply=result["reply"],
-        intent=result["intent"],
-        confidence=result["confidence"],
-        data=result.get("data"),
-        follow_ups=result.get("follow_ups", []),
-        session_id=message_data.session_id or str(uuid.uuid4())
-    )
-
-# Keep the welcome endpoint as is
-@app.get("/chat/welcome")
-async def get_welcome_data(current_user=Depends(get_optional_current_user)):
-    """Get welcome screen data with user stats"""
-    try:
-        if current_user:
-            user_id = str(current_user["_id"])
-            activity = await chatbot.get_user_activity(user_id)  # ✅ CORRECT
-            
-            return {
-                "user": {
-                    "name": current_user.get("name", "User"),
-                    "email": current_user.get("email"),
-                    "authenticated": True
-                },
-                "stats": activity.get("stats", {}),
-                "features": [
-                    {"id": "ideas", "name": "Idea Validation", "icon": "lightbulb"},
-                    {"id": "research", "name": "Research Finder", "icon": "book"},
-                    {"id": "roadmaps", "name": "Roadmap Generator", "icon": "map"},
-                    {"id": "team", "name": "Team Builder", "icon": "users"}
-                ]
-            }
-        else:
-            return {
-                "user": {
-                    "name": "Guest",
-                    "authenticated": False
-                },
-                "stats": {"ideas": 0, "roadmaps": 0, "research": 0},
-                "features": [
-                    {"id": "ideas", "name": "Idea Validation", "icon": "lightbulb"},
-                    {"id": "research", "name": "Research Finder", "icon": "book"},
-                    {"id": "roadmaps", "name": "Roadmap Generator", "icon": "map"},
-                    {"id": "team", "name": "Team Builder", "icon": "users"}
-                ]
-            }
-    except Exception as e:
-        logger.error(f"Welcome data error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to load welcome data")
-
 
 # ==============================================
 # APPLICATION STARTUP
@@ -3017,22 +3419,23 @@ async def get_welcome_data(current_user=Depends(get_optional_current_user)):
 if __name__ == "__main__":
     import uvicorn
     
-    # Print startup info
+    # Get port from environment (Render will set this)
+    port = int(os.getenv("PORT", 8000))
+    
     print("\n" + "="*60)
-    print("🚀 STARTUP GPS API SERVER")
+    print(f"🚀 STARTUP GPS API SERVER ({ENVIRONMENT.upper()})")
     print("="*60)
-    print(f"📍 Server URL: http://localhost:8000")
-    print(f"📖 API Docs: http://localhost:8000/docs")
-    print(f"🔧 Health Check: http://localhost:8000/health")
-    
-    if chatbot_instance:
-        print("🤖 Chatbot Status: ✅ ACTIVE")
-        print("💬 Chat Health: http://localhost:8000/chat/health")
-    else:
-        print("🤖 Chatbot Status: ❌ DISABLED")
-    
+    print(f"🌐 Server URL: http://0.0.0.0:{port}")
+    print(f"📖 API Docs: http://0.0.0.0:{port}/docs")
+    print(f"🔧 Health Check: http://0.0.0.0:{port}/health")
+    print(f"🌍 CORS Origins: {allowed_origins}")
     print("="*60)
     print("✅ All systems ready! Starting server...")
     print("="*60 + "\n")
     
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(
+        app, 
+        host="0.0.0.0",  # Listen on all interfaces for Render
+        port=port, 
+        log_level="info"
+    )

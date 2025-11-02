@@ -825,34 +825,83 @@ def get_messages(user_id: str, conversation_id: str, skip: int = 0, limit: int =
 # =====================
 
 def create_connection_request(sender_id: str, receiver_id: str, message: str = "") -> str:
-    """Create a new connection request - FIXED VERSION"""
+    """Create connection request with proper duplicate prevention"""
     try:
-        # Check if request already exists
-        existing = connection_requests_collection.find_one({
-            "sender_id": ObjectId(sender_id),
-            "receiver_id": ObjectId(receiver_id),
-            "status": "pending"
-        })
+        sender_oid = ObjectId(sender_id)
+        receiver_oid = ObjectId(receiver_id)
         
-        if existing:
-            raise ValueError("Connection request already sent")
+        # Prevent self-connection
+        if sender_id == receiver_id:
+            raise ValueError("Cannot send connection request to yourself")
         
-        # Check if already connected
+        # Check if already connected (bidirectional check)
         existing_connection = connections_collection.find_one({
-            "user_id": ObjectId(sender_id),
-            "target_user_id": ObjectId(receiver_id),
-            "status": "connected"
+            "$or": [
+                {"user_id": sender_oid, "target_user_id": receiver_oid, "status": "connected"},
+                {"user_id": receiver_oid, "target_user_id": sender_oid, "status": "connected"}
+            ]
         })
         
         if existing_connection:
-            raise ValueError("Already connected")
+            raise ValueError("Already connected with this user")
+        
+        # Check for existing pending requests (bidirectional)
+        existing_request = connection_requests_collection.find_one({
+            "$or": [
+                {"sender_id": sender_oid, "receiver_id": receiver_oid, "status": "pending"},
+                {"sender_id": receiver_oid, "receiver_id": sender_oid, "status": "pending"}
+            ]
+        })
+        
+        if existing_request:
+            # If the OTHER person sent you a request, auto-accept it
+            if str(existing_request["sender_id"]) == receiver_id:
+                logging.info(f"Auto-accepting reverse request from {receiver_id}")
+                
+                # Update the existing request to accepted
+                connection_requests_collection.update_one(
+                    {"_id": existing_request["_id"]},
+                    {
+                        "$set": {
+                            "status": "accepted",
+                            "updated_at": datetime.utcnow()
+                        }
+                    }
+                )
+                
+                # Create bidirectional connections
+                create_connection_fixed(sender_id, receiver_id)
+                create_connection_fixed(receiver_id, sender_id)
+                
+                return str(existing_request["_id"])
+            else:
+                # You already sent them a request
+                raise ValueError("Connection request already sent")
+        
+        # Check for rejected requests (allow retry after 24 hours)
+        rejected_request = connection_requests_collection.find_one({
+            "sender_id": sender_oid,
+            "receiver_id": receiver_oid,
+            "status": "rejected"
+        })
+        
+        if rejected_request:
+            # Check if 24 hours have passed
+            rejection_time = rejected_request.get("updated_at", rejected_request.get("created_at"))
+            if rejection_time:
+                hours_since_rejection = (datetime.utcnow() - rejection_time).total_seconds() / 3600
+                if hours_since_rejection < 24:
+                    raise ValueError("Cannot send another request within 24 hours of rejection")
+            
+            # Delete old rejected request
+            connection_requests_collection.delete_one({"_id": rejected_request["_id"]})
         
         # Create new request
         request_doc = {
-            "sender_id": ObjectId(sender_id),
-            "receiver_id": ObjectId(receiver_id),
-            "status": "pending",
+            "sender_id": sender_oid,
+            "receiver_id": receiver_oid,
             "message": message,
+            "status": "pending",
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow()
         }
@@ -861,9 +910,15 @@ def create_connection_request(sender_id: str, receiver_id: str, message: str = "
         logging.info(f"Connection request created: {result.inserted_id}")
         return str(result.inserted_id)
         
+    except ValueError as e:
+        # Re-raise ValueError for proper error handling in API
+        logging.warning(f"Connection request validation failed: {e}")
+        raise
+    except errors.DuplicateKeyError:
+        raise ValueError("Connection request already exists")
     except Exception as e:
         logging.error(f"Error creating connection request: {e}")
-        raise
+        raise ValueError("Failed to create connection request")
 
 def get_connection_requests_fixed(user_id: str, request_type: str = "received") -> List[Dict]:
     """Get connection requests for a user - FIXED VERSION"""
@@ -1189,20 +1244,33 @@ def get_messages_fixed(user_id: str, conversation_id: str, skip: int = 0, limit:
         return []
     
 def disconnect_users(user_id: str, target_user_id: str) -> bool:
-    """Remove connection between two users (mutual disconnect)"""
+    """Remove connection between two users (mutual disconnect) AND clean up requests"""
     try:
+        user_oid = ObjectId(user_id)
+        target_oid = ObjectId(target_user_id)
+        
         # Remove connection from both directions
         connections_collection.delete_one({
-            "user_id": ObjectId(user_id),
-            "target_user_id": ObjectId(target_user_id)
+            "user_id": user_oid,
+            "target_user_id": target_oid
         })
         
         connections_collection.delete_one({
-            "user_id": ObjectId(target_user_id),
-            "target_user_id": ObjectId(user_id)
+            "user_id": target_oid,
+            "target_user_id": user_oid
         })
         
-        logging.info(f"Disconnected users {user_id} and {target_user_id}")
+        # ✅ DELETE THE OLD CONNECTION REQUEST (critical fix!)
+        # Check both directions since we don't know who sent the original request
+        deleted_requests = connection_requests_collection.delete_many({
+            "$or": [
+                {"sender_id": user_oid, "receiver_id": target_oid},
+                {"sender_id": target_oid, "receiver_id": user_oid}
+            ]
+        })
+        
+        logging.info(f"🗑️ Disconnected users {user_id} and {target_user_id}")
+        logging.info(f"🗑️ Deleted {deleted_requests.deleted_count} old connection request(s)")
         return True
         
     except Exception as e:

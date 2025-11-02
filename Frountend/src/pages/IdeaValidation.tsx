@@ -249,13 +249,28 @@ const IconRotateCcw = (props: React.SVGProps<SVGSVGElement>) => (
 
 // API Service - Updated with real API calls
 const apiService = {
+  // Helper to get auth token
+  getAuthToken: () => {
+    return localStorage.getItem("token") || sessionStorage.getItem("token");
+  },
+
+  // Helper to get auth headers
+  getAuthHeaders: () => {
+    const token = apiService.getAuthToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  },
+
   validateIdea: async (prompt: string): Promise<{data?: ValidationResponse, error?: string}> => {
     try {
       const response = await fetch('http://127.0.0.1:8000/validate-idea-enhanced', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: apiService.getAuthHeaders(), // ✅ ADD AUTH HERE
         body: JSON.stringify({ prompt }),
       });
       
@@ -275,9 +290,7 @@ const apiService = {
     try {
       const response = await fetch('http://127.0.0.1:8000/chat-with-idea', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: apiService.getAuthHeaders(), // ✅ ADD AUTH HERE
         body: JSON.stringify({ 
           message, 
           idea_context: ideaContext,
