@@ -268,7 +268,7 @@ const apiService = {
 
   validateIdea: async (prompt: string): Promise<{data?: ValidationResponse, error?: string}> => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/validate-idea-enhanced', {
+      const response = await fetch('https://startup-gps-backend-6rcx.onrender.com/validate-idea-enhanced', {
         method: 'POST',
         headers: apiService.getAuthHeaders(), // ✅ ADD AUTH HERE
         body: JSON.stringify({ prompt }),
@@ -288,7 +288,7 @@ const apiService = {
 
   chatWithIdea: async (message: string, ideaContext: string, sessionId: string): Promise<{response?: string, error?: string}> => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/chat-with-idea', {
+      const response = await fetch('https://startup-gps-backend-6rcx.onrender.co/chat-with-idea', {
         method: 'POST',
         headers: apiService.getAuthHeaders(), // ✅ ADD AUTH HERE
         body: JSON.stringify({ 
