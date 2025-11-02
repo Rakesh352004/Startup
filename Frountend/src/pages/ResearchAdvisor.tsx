@@ -108,7 +108,7 @@ export default function ResearchAdvisor() {
       }
 
       console.log('Fetching research papers...');
-      const response = await fetch('http://localhost:8000/research-papers', {
+      const response = await fetch('https://startup-gps-backend-6rcx.onrender.com/research-papers', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

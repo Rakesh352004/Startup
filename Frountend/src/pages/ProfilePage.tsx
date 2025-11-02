@@ -33,7 +33,7 @@ const Profile = () => {
         const token = localStorage.getItem('token');
         if (!token) return;
         
-        const response = await axios.get<ProfileData>('http://localhost:8000/profile', {
+        const response = await axios.get<ProfileData>('https://startup-gps-backend-6rcx.onrender.com/profile', {
           headers: { Authorization: `Bearer ${token}` }
         });
         
@@ -76,7 +76,7 @@ const Profile = () => {
         return;
       }
 
-      await axios.post('http://localhost:8000/profile', formData, {
+      await axios.post('https://startup-gps-backend-6rcx.onrender.com/profile', formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
