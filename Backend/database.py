@@ -1,7 +1,8 @@
-# Clean database.py - Team Finder Functionality
+# Replace lines 1-15 in database.py with this:
+
 import os
 from pymongo import MongoClient, errors
-from passlib.context import CryptContext
+import bcrypt  # Use bcrypt directly instead of passlib
 from dotenv import load_dotenv
 from bson.objectid import ObjectId
 from datetime import datetime, timedelta
@@ -19,112 +20,54 @@ JWT_SECRET = os.getenv("JWT_SECRET", "R9AwDobUDMrtgJ_KBySMyOQkpAZAo3Eh0JFXPdUfEB
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRES_MINUTES = int(os.getenv("JWT_EXPIRES_MINUTES", "60"))
 
-if not MONGO_URI or not MONGO_DB:
-    raise Exception("MONGO_URI and MONGO_DB must be set in environment")
+# ... rest of your MongoDB setup code stays the same ...
 
-# MongoDB connection
-client = MongoClient(MONGO_URI)
-db = client[MONGO_DB]
-
-# Collections
-users_collection = db["users"]
-ideas_collection = db["ideas"]
-profiles_collection = db["profiles"]
-roadmaps_collection = db["roadmaps"]
-research_collection = db["research"]
-team_searches_collection = db["team_searches"]
-connections_collection = db["connections"]
-messages_collection = db["messages"]
-conversations_collection = db["conversations"]
-connection_requests_collection = db["connection_requests"]
-support_tickets_collection = db["support_tickets"]
-admin_users_collection = db["admin_users"]
-ticket_responses_collection = db["ticket_responses"]
-# Create indexes for better performance
-try:
-    users_collection.create_index("email", unique=True)
-    profiles_collection.create_index("user_id", unique=True)
-    roadmaps_collection.create_index("user_id")
-    research_collection.create_index("user_id")
-    team_searches_collection.create_index("user_id")
-    team_searches_collection.create_index("created_at")
-    messages_collection.create_index("conversation_id")
-    messages_collection.create_index("sender_id")
-    messages_collection.create_index("timestamp")
-    conversations_collection.create_index("participant_ids")
-    conversations_collection.create_index("last_message_time")
-    connection_requests_collection.create_index([("sender_id", 1), ("receiver_id", 1)])
-    connection_requests_collection.create_index("status")
-    connection_requests_collection.create_index("created_at")
-    connections_collection.create_index([("user_id", 1), ("target_user_id", 1)])
-    connections_collection.create_index("status")
-    connections_collection.create_index([("user_id", 1), ("created_at", -1)])
-    connections_collection.create_index([("status", 1)])
-    connections_collection.create_index([("ticket_id", 1)], unique=True)
-
-except Exception as e:
-    print(f"Index creation error: {e}")
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Then REPLACE the hash_password and verify_password functions (around line 69-85) with this:
 
 # =====================
-# Auth Helper Functions
-# =====================
-# Replace the existing hash_password and verify_password functions in database.py
-# (around lines 69-76) with these fixed versions:
-
-import hashlib
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# =====================
-# FIXED Auth Helper Functions
+# Auth Helper Functions - SIMPLE BCRYPT (NO PASSLIB)
 # =====================
 def hash_password(password: str) -> str:
-    """
-    Hash a password using bcrypt with 72-byte limit handling
-    Bcrypt has a 72-byte input limit, so we pre-hash long passwords with SHA256
-    """
+    """Hash a password using bcrypt directly"""
     try:
-        # Convert password to bytes to check actual byte length
+        # Convert password to bytes
         password_bytes = password.encode('utf-8')
         
-        # If password is longer than 72 bytes, pre-hash it with SHA256
+        # Bcrypt has 72-byte limit, truncate if needed
         if len(password_bytes) > 72:
-            # Pre-hash long passwords to ensure they fit within bcrypt's limit
-            password = hashlib.sha256(password_bytes).hexdigest()
-            logging.info("Password pre-hashed due to length (>72 bytes)")
+            password_bytes = password_bytes[:72]
+            logging.warning("Password truncated to 72 bytes for bcrypt")
         
-        # Now hash with bcrypt
-        return pwd_context.hash(password)
+        # Generate salt and hash
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password_bytes, salt)
+        
+        # Return as string
+        return hashed.decode('utf-8')
         
     except Exception as e:
         logging.error(f"Error hashing password: {e}")
-        # Fallback: truncate and hash
-        truncated_password = password[:72] if len(password) > 72 else password
-        return pwd_context.hash(truncated_password)
+        raise
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Verify a password against its bcrypt hash
-    Handles pre-hashed passwords (those >72 bytes)
-    """
+    """Verify a password against its bcrypt hash"""
     try:
-        # First try direct verification (for normal length passwords)
-        try:
-            return pwd_context.verify(plain_password, hashed_password)
-        except Exception:
-            # If that fails, try with SHA256 pre-hashing (for long passwords)
-            password_bytes = plain_password.encode('utf-8')
-            if len(password_bytes) > 72:
-                pre_hashed = hashlib.sha256(password_bytes).hexdigest()
-                return pwd_context.verify(pre_hashed, hashed_password)
-            
-            # If still failing, try truncation (for legacy compatibility)
-            truncated = plain_password[:72]
-            return pwd_context.verify(truncated, hashed_password)
-            
+        # Convert to bytes
+        password_bytes = plain_password.encode('utf-8')
+        
+        # Truncate if needed (same as hashing)
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+        
+        # Convert hash to bytes if it's a string
+        if isinstance(hashed_password, str):
+            hashed_bytes = hashed_password.encode('utf-8')
+        else:
+            hashed_bytes = hashed_password
+        
+        # Verify
+        return bcrypt.checkpw(password_bytes, hashed_bytes)
+        
     except Exception as e:
         logging.error(f"Error verifying password: {e}")
         return False
