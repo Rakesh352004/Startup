@@ -3009,7 +3009,7 @@ def health_check():
         "environment": ENVIRONMENT,
         "timestamp": datetime.utcnow().isoformat(),
         "services": {
-            "database": "connected" if db else "error",
+            "database": "connected" if db is not None else "error",
             "groq_api": "configured" if GROQ_API_KEY else "not_configured",
             "semantic_scholar": "configured" if SEMANTIC_SCHOLAR_API_KEY else "not_configured"
         }

@@ -70,13 +70,64 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # =====================
 # Auth Helper Functions
 # =====================
-def hash_password(password: str) -> str:
-    """Hash a password using bcrypt"""
-    return pwd_context.hash(password)
+# Replace the existing hash_password and verify_password functions in database.py
+# (around lines 69-76) with these fixed versions:
 
-def verify_password(plain: str, hashed: str) -> bool:
-    """Verify a password against its hash"""
-    return pwd_context.verify(plain, hashed)
+import hashlib
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# =====================
+# FIXED Auth Helper Functions
+# =====================
+def hash_password(password: str) -> str:
+    """
+    Hash a password using bcrypt with 72-byte limit handling
+    Bcrypt has a 72-byte input limit, so we pre-hash long passwords with SHA256
+    """
+    try:
+        # Convert password to bytes to check actual byte length
+        password_bytes = password.encode('utf-8')
+        
+        # If password is longer than 72 bytes, pre-hash it with SHA256
+        if len(password_bytes) > 72:
+            # Pre-hash long passwords to ensure they fit within bcrypt's limit
+            password = hashlib.sha256(password_bytes).hexdigest()
+            logging.info("Password pre-hashed due to length (>72 bytes)")
+        
+        # Now hash with bcrypt
+        return pwd_context.hash(password)
+        
+    except Exception as e:
+        logging.error(f"Error hashing password: {e}")
+        # Fallback: truncate and hash
+        truncated_password = password[:72] if len(password) > 72 else password
+        return pwd_context.hash(truncated_password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verify a password against its bcrypt hash
+    Handles pre-hashed passwords (those >72 bytes)
+    """
+    try:
+        # First try direct verification (for normal length passwords)
+        try:
+            return pwd_context.verify(plain_password, hashed_password)
+        except Exception:
+            # If that fails, try with SHA256 pre-hashing (for long passwords)
+            password_bytes = plain_password.encode('utf-8')
+            if len(password_bytes) > 72:
+                pre_hashed = hashlib.sha256(password_bytes).hexdigest()
+                return pwd_context.verify(pre_hashed, hashed_password)
+            
+            # If still failing, try truncation (for legacy compatibility)
+            truncated = plain_password[:72]
+            return pwd_context.verify(truncated, hashed_password)
+            
+    except Exception as e:
+        logging.error(f"Error verifying password: {e}")
+        return False
 
 def create_access_token(subject: str, expires_minutes: int = JWT_EXPIRES_MINUTES):
     """Create a JWT access token"""
