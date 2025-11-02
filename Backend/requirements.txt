@@ -8,3 +8,4 @@ requests==2.31.0
 httpx==0.26.0
 python-multipart==0.0.6
 pydantic[email]==2.5.3
+pydantic-core==2.14.6
