@@ -89,7 +89,8 @@ allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:3001",
-    "http://127.0.0.1:3001"
+    "http://127.0.0.1:3001",
+    "https://startup-gps-frontend-v5f9.onrender.com"  # Add this line
 ]
 
 # Add production frontend URL if specified
