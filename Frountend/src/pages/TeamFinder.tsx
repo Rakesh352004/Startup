@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, MapPin, Briefcase, Users, Star, Mail, AlertCircle, Bell, MessageCircle, ArrowLeft, UserMinus, UserCheck, AlertTriangle } from 'lucide-react';
 import apiService from '../services/api';
 
@@ -45,6 +46,7 @@ interface TeamFinderProps {
 }
 
 const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
+  const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<'dashboard' | 'search' | 'results' | 'requests'>('dashboard');
   const [requirements, setRequirements] = useState<TeamRequirements>({
     required_skills: [],
@@ -143,8 +145,8 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
     if (onNavigateToProfile) {
       onNavigateToProfile();
     } else {
-      // Fallback: try to navigate using window.location if callback not provided
-      window.location.href = '/profile';
+      // Use React Router navigation
+      navigate('/profile');
     }
   };
 
