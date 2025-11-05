@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-
+import { useNavigate } from 'react-router-dom'; // ADD THIS LINE
 // --- Interfaces ---
 interface ValidationItem {
   prompt: string;
@@ -235,6 +235,7 @@ function UserCard({ user, expanded, onExpand }: UserCardProps) {
 }
 
 const DashboardPage: React.FC = () => {
+  const navigate = useNavigate(); // ADD THIS LINE
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -248,6 +249,7 @@ const DashboardPage: React.FC = () => {
       const token = localStorage.getItem('token');
       if (!token) {
         setError('No authentication token found. Please log in.');
+        navigate('/signin'); 
         return;
       }
       
@@ -305,7 +307,7 @@ const DashboardPage: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    window.location.href = '/LoginPage';
+    navigate('/signin');
   };
 
   if (loading) return (
