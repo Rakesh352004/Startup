@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // ADD THIS LINE
+import { useNavigate } from 'react-router-dom';
+
 // --- Interfaces ---
 interface ValidationItem {
   prompt: string;
@@ -235,7 +236,7 @@ function UserCard({ user, expanded, onExpand }: UserCardProps) {
 }
 
 const DashboardPage: React.FC = () => {
-  const navigate = useNavigate(); // ADD THIS LINE
+  const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -249,7 +250,8 @@ const DashboardPage: React.FC = () => {
       const token = localStorage.getItem('token');
       if (!token) {
         setError('No authentication token found. Please log in.');
-        navigate('/signin'); 
+        setTimeout(() => navigate('/signin'), 2000);
+        setLoading(false);
         return;
       }
       
@@ -266,6 +268,14 @@ const DashboardPage: React.FC = () => {
         
         if (response.status === 403) {
           setError('Access denied. You need developer privileges.');
+          setLoading(false);
+          return;
+        }
+        
+        if (response.status === 401) {
+          setError('Session expired. Please log in again.');
+          setTimeout(() => navigate('/signin'), 2000);
+          setLoading(false);
           return;
         }
         
@@ -279,14 +289,27 @@ const DashboardPage: React.FC = () => {
         setFilteredUsers(result.users || []);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error occurred';
-        setError(message);
+        setError(`Cannot connect to backend server: ${message}. Make sure the server is running on http://localhost:8000`);
+        // Set empty data so page still renders
+        setStats({
+          total_users: 0,
+          total_users_change: '0',
+          ideas_validated: 0,
+          ideas_validated_change: '0',
+          roadmaps_generated: 0,
+          roadmaps_generated_change: '0',
+          researches_conducted: 0,
+          researches_conducted_change: '0'
+        });
+        setUsers([]);
+        setFilteredUsers([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     let filtered = users;
@@ -319,29 +342,6 @@ const DashboardPage: React.FC = () => {
     </div>
   );
 
-  if (error) return (
-    <div className="min-h-screen p-8 bg-gray-900">
-      <div className="bg-red-900 bg-opacity-20 border-l-4 border-red-500 p-4 mb-6">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <div className="ml-3">
-            <p className="text-sm text-red-400">{error}</p>
-          </div>
-        </div>
-      </div>
-      <button
-        onClick={() => window.location.reload()}
-        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-      >
-        Retry
-      </button>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-gray-900 text-gray-200">
       {/* Header */}
@@ -353,7 +353,7 @@ const DashboardPage: React.FC = () => {
           </div>
           <button
             onClick={handleLogout}
-            className="flex items-center space-x-2 text-gray-300 hover:text-white"
+            className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -364,6 +364,22 @@ const DashboardPage: React.FC = () => {
       </header>
 
       <div className="p-8">
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-900 bg-opacity-20 border-l-4 border-red-500 p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-400">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Summary Info Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           {stats ? (
@@ -375,7 +391,7 @@ const DashboardPage: React.FC = () => {
             </>
           ) : (
             <div className="col-span-4 text-center text-gray-400">
-              Loading statistics...
+              No statistics available
             </div>
           )}
         </div>
