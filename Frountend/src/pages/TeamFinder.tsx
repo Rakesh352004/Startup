@@ -548,7 +548,7 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
                     {profileCheckMessage || 'Your profile is incomplete. Please fill in all required fields to unlock team matching features.'}
                   </p>
                   <a 
-                    href="/profile"
+                    href="https://startup-gps-backend-6rcx.onrender.com/profile"
                     className="inline-flex items-center bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg transition font-semibold mt-2"
                   >
                     <UserCheck className="w-4 h-4 mr-2" />
