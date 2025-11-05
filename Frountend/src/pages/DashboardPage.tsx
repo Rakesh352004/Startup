@@ -259,7 +259,7 @@ const DashboardPage: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const response = await fetch('http://localhost:8000/dashboard-data', {
+        const response = await fetch('https://startup-gps-backend-6rcx.onrender.com/dashboard-data', {
           headers: { 
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
