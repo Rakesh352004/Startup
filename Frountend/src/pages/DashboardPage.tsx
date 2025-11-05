@@ -305,7 +305,7 @@ const DashboardPage: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    window.location.href = '/login';
+    window.location.href = '/LoginPage';
   };
 
   if (loading) return (
