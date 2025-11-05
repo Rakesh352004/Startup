@@ -304,22 +304,8 @@ const DashboardPage: React.FC = () => {
   };
 
   const handleLogout = () => {
-    console.log('Logout clicked');
-    
-    // Remove token from localStorage
     localStorage.removeItem('token');
-    console.log('Token removed');
-    
-    // Try multiple redirect methods for compatibility
-    try {
-      console.log('Attempting redirect to /signin');
-      // Method 1: Replace current page (preferred)
-      window.location.replace('/signin');
-    } catch (e) {
-      console.error('Redirect error:', e);
-      // Method 2: Fallback to href
-      window.location.href = '/signin';
-    }
+    window.location.href = '/signin';
   };
 
   if (loading) return (
@@ -365,7 +351,7 @@ const DashboardPage: React.FC = () => {
           </div>
           <button
             onClick={handleLogout}
-            className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
+            className="flex items-center space-x-2 text-gray-300 hover:text-white"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -437,4 +423,4 @@ const DashboardPage: React.FC = () => {
   );
 };
 
-export default DashboardPage
+export default DashboardPage;
