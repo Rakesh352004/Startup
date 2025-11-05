@@ -144,7 +144,7 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
       onNavigateToProfile();
     } else {
       // Fallback: try to navigate using window.location if callback not provided
-      window.location.href = 'https://startup-gps-backend-6rcx.onrender.com/profile';
+      window.location.href = '/profile';
     }
   };
 
