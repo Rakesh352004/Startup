@@ -4,7 +4,7 @@ import apiService from '../services/api';
 
 interface TeamRequirements {
   required_skills: string[];
-  current_role: string;  // Changed from preferred_role
+  current_role: string;
   experience: string;
   availability: string;
   location: string;
@@ -18,7 +18,7 @@ interface MatchedProfile {
   role: string;
   skills: string[];
   interests: string[];
-  current_role: string;  // Changed from preferred_role
+  current_role: string;
   experience: string;
   availability: string;
   location: string;
@@ -39,11 +39,16 @@ interface ConnectionRequest {
   user_profile?: any;
 }
 
-const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberName: string, conversationId?: string) => void }) => {
+interface TeamFinderProps {
+  onStartChat?: (memberId: string, memberName: string, conversationId?: string) => void;
+  onNavigateToProfile?: () => void;
+}
+
+const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
   const [currentView, setCurrentView] = useState<'dashboard' | 'search' | 'results' | 'requests'>('dashboard');
   const [requirements, setRequirements] = useState<TeamRequirements>({
     required_skills: [],
-    current_role: '',  // Changed from preferred_role
+    current_role: '',
     experience: '',
     availability: '',
     location: '',
@@ -101,7 +106,7 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
       if (response.ok) {
         const profile = await response.json();
         
-        // Check all required fields (updated to use 'role' instead of 'preferred_role')
+        // Check all required fields
         const missingFields: string[] = [];
         
         if (!profile.name?.trim()) missingFields.push('Name');
@@ -131,6 +136,15 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
       setProfileCheckMessage('Error checking profile completion. Please try again.');
     } finally {
       setCheckingProfile(false);
+    }
+  };
+
+  const handleCompleteProfile = () => {
+    if (onNavigateToProfile) {
+      onNavigateToProfile();
+    } else {
+      // Fallback: try to navigate using window.location if callback not provided
+      window.location.href = '/profile';
     }
   };
 
@@ -222,15 +236,12 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
           console.log('📤 Request sent successfully');
         }
         
-        // Show success message briefly
-        setError(null); // Clear any previous errors
+        setError(null);
       } else if (response.status === 400) {
-        // Handle the case where request already exists
         const errorMsg = response.error || '';
         console.log('⚠️ Request already exists:', errorMsg);
         
         if (errorMsg.includes('already sent') || errorMsg.includes('already exist')) {
-          // Update UI to show request was already sent
           setMatchedProfiles(prev => 
             prev.map(profile => 
               profile.id === targetUserId 
@@ -280,6 +291,7 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
       });
     }
   };
+
   const respondToConnectionRequest = async (requestId: string, action: 'accept' | 'reject') => {
     setProcessingRequests(prev => new Set(prev).add(requestId));
     
@@ -530,8 +542,8 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
       <div className="bg-[#0f172a] text-white min-h-screen px-4 py-8 font-['Inter']">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
-            <h2 className="text-5xl font-bold mb-4 text-white-400 flex items-center justify-center">
-            <Users className="w-10 h-10 mr-3 text-blue-500" />
+            <h2 className="text-5xl font-bold mb-4 text-white flex items-center justify-center">
+              <Users className="w-10 h-10 mr-3 text-blue-500" />
               Team Finder
             </h2>
             <p className="text-gray-300">Find and connect with team members</p>
@@ -547,13 +559,13 @@ const TeamFinder = ({ onStartChat }: { onStartChat?: (memberId: string, memberNa
                   <p className="text-yellow-200 mb-2">
                     {profileCheckMessage || 'Your profile is incomplete. Please fill in all required fields to unlock team matching features.'}
                   </p>
-                  <a 
-                    href="https://startup-gps-backend-6rcx.onrender.com/profile"
+                  <button 
+                    onClick={handleCompleteProfile}
                     className="inline-flex items-center bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg transition font-semibold mt-2"
                   >
                     <UserCheck className="w-4 h-4 mr-2" />
                     Complete Profile Now
-                  </a>
+                  </button>
                 </div>
               </div>
             </div>
