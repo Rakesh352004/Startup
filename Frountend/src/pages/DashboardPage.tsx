@@ -152,7 +152,7 @@ function UserCard({ user, expanded, onExpand }: UserCardProps) {
                         user.profile_data?.experience?.toLowerCase().includes('founder') ? 'Founder' :
                         user.profile_data?.experience?.toLowerCase().includes('product') ? 'Product Manager' :
                         user.profile_data?.experience?.toLowerCase().includes('developer') ? 'Developer' :
-                        user.profile_data?.experience?.toLowerCase().includes('designer') ? 'Designer' :
+                        user.profile_data?.experience?.toLowerCase().includes('designer') ? 'designer' :
                         "Not specified")}
                     </div>
                   </div>
@@ -259,23 +259,12 @@ const DashboardPage: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        // Use environment variable or fallback to production URL
-        const apiUrl = import.meta.env.VITE_API_URL || 'https://startup-gps-backend-6rcx.onrender.com';
-        
-        console.log('Fetching from:', `${apiUrl}/dashboard-data`);
-        
-        const response = await fetch(`${apiUrl}/dashboard-data`, {
-          method: 'GET',
+        const response = await fetch('http://localhost:8000/dashboard-data', {
           headers: { 
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          mode: 'cors',
-          credentials: 'include'
+            'Content-Type': 'application/json'
+          }
         });
-        
-        console.log('Response status:', response.status);
         
         if (response.status === 403) {
           setError('Access denied. You need developer privileges.');
@@ -285,33 +274,22 @@ const DashboardPage: React.FC = () => {
         
         if (response.status === 401) {
           setError('Session expired. Please log in again.');
-          localStorage.removeItem('token');
           setTimeout(() => navigate('/signin'), 2000);
           setLoading(false);
           return;
         }
         
-        if (response.status === 404) {
-          setError('Dashboard endpoint not found. The API endpoint may be /dashboard instead of /dashboard-data. Please check your backend routes.');
-          setLoading(false);
-          return;
-        }
-        
         if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const result: ApiResponse = await response.json();
-        console.log('Data received:', result);
-        
         setStats(result.stats || null);
         setUsers(result.users || []);
         setFilteredUsers(result.users || []);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error occurred';
-        console.error('Dashboard fetch error:', err);
-        setError(`Cannot connect to backend server: ${message}. Please check if the server is running and the endpoint exists.`);
+        setError(`Cannot connect to backend server: ${message}. Make sure the server is running on http://localhost:8000`);
         // Set empty data so page still renders
         setStats({
           total_users: 0,
