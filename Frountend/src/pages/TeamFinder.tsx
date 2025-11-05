@@ -161,24 +161,34 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
 
   const loadConnectionRequests = async () => {
     try {
+      console.log('📥 Loading connection requests...');
       const response = await apiService.getReceivedConnectionRequests();
+      console.log('📥 Connection requests response:', response);
+      
       if (response.data) {
-        setConnectionRequests(response.data.requests || []);
-        setPendingRequestCount(response.data.requests?.length || 0);
+        const requests = response.data.requests || [];
+        console.log('📥 Found', requests.length, 'requests');
+        setConnectionRequests(requests);
+        setPendingRequestCount(requests.length);
       }
     } catch (error) {
-      console.error('Error loading connection requests:', error);
+      console.error('❌ Error loading connection requests:', error);
     }
   };
 
   const loadConnectedUsers = async () => {
     try {
+      console.log('👥 Loading connected users...');
       const response = await apiService.getConnections();
+      console.log('👥 Connected users response:', response);
+      
       if (response.data) {
-        setConnectedProfiles(response.data.connections || []);
+        const connections = response.data.connections || [];
+        console.log('👥 Found', connections.length, 'connections');
+        setConnectedProfiles(connections);
       }
     } catch (error) {
-      console.error('Error loading connections:', error);
+      console.error('❌ Error loading connections:', error);
     }
   };
 
@@ -295,27 +305,93 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
   };
 
   const respondToConnectionRequest = async (requestId: string, action: 'accept' | 'reject') => {
+    console.log('='.repeat(60));
+    console.log(`🔄 ${action.toUpperCase()} CONNECTION REQUEST`);
+    console.log('='.repeat(60));
+    console.log('📋 Request ID:', requestId);
+    console.log('📋 Action:', action);
+    console.log('📋 Token exists:', !!localStorage.getItem('token'));
+    console.log('📋 Current requests count:', connectionRequests.length);
+    
     setProcessingRequests(prev => new Set(prev).add(requestId));
+    setError(null);
     
     try {
+      console.log('📤 Calling API service...');
       const response = await apiService.respondToConnectionRequest(requestId, action);
       
-      if (response.data) {
-        setConnectionRequests(prev => prev.filter(req => req.id !== requestId));
-        setPendingRequestCount(prev => prev - 1);
+      console.log('✅ API Response received:');
+      console.log('   - Status:', response.status);
+      console.log('   - Data:', response.data);
+      console.log('   - Error:', response.error);
+      
+      // Check for successful response
+      if (response.status === 200 || response.data) {
+        console.log('✨ Request processed successfully!');
         
+        // Remove the request from the list
+        setConnectionRequests(prev => {
+          const filtered = prev.filter(req => req.id !== requestId);
+          console.log('📝 Requests after removal:', filtered.length);
+          return filtered;
+        });
+        
+        // Update pending count
+        setPendingRequestCount(prev => {
+          const newCount = Math.max(0, prev - 1);
+          console.log('🔢 New pending count:', newCount);
+          return newCount;
+        });
+        
+        // If accepted, reload connections
         if (action === 'accept') {
+          console.log('🤝 Action was ACCEPT - reloading connected users...');
           await loadConnectedUsers();
+          console.log('✅ Connected users reloaded');
+        } else {
+          console.log('❌ Action was REJECT - no need to reload connections');
         }
+        
+        // Clear any errors
+        setError(null);
+        console.log('✅ All state updates completed successfully');
+        
+      } else {
+        console.error('⚠️ Unexpected response format:', response);
+        throw new Error(response.error || `Failed to ${action} request`);
       }
+      
     } catch (error: any) {
-      setError(error.response?.data?.detail || `Failed to ${action} connection request.`);
+      console.error('❌ ERROR OCCURRED:');
+      console.error('   - Error object:', error);
+      console.error('   - Error response:', error.response);
+      console.error('   - Error data:', error.response?.data);
+      console.error('   - Error status:', error.response?.status);
+      console.error('   - Error message:', error.message);
+      
+      const errorMessage = error.response?.data?.detail || 
+                          error.response?.data?.message ||
+                          error.message || 
+                          `Failed to ${action} connection request. Please try again.`;
+      
+      console.error('📝 Displaying error to user:', errorMessage);
+      setError(errorMessage);
+      
+      // Auto-clear error after 5 seconds
+      setTimeout(() => {
+        console.log('🧹 Auto-clearing error message');
+        setError(null);
+      }, 5000);
+      
     } finally {
+      console.log('🏁 Cleaning up processing state...');
       setProcessingRequests(prev => {
         const newSet = new Set(prev);
         newSet.delete(requestId);
+        console.log('📝 Processing requests remaining:', newSet.size);
         return newSet;
       });
+      console.log('='.repeat(60));
     }
   };
 
@@ -468,10 +544,18 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
           </div>
 
           {error && (
-            <div className="mb-6 bg-red-900/20 border border-red-500/50 rounded-lg p-4">
-              <div className="flex items-center">
-                <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
-                <p className="text-red-300">{error}</p>
+            <div className="mb-6 bg-red-900/30 border-2 border-red-500 rounded-lg p-4 animate-pulse">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <AlertCircle className="w-5 h-5 text-red-400 mr-2 flex-shrink-0" />
+                  <p className="text-red-200 font-medium">{error}</p>
+                </div>
+                <button 
+                  onClick={() => setError(null)}
+                  className="ml-4 text-red-400 hover:text-red-300 text-2xl font-bold leading-none"
+                >
+                  ×
+                </button>
               </div>
             </div>
           )}
@@ -485,19 +569,22 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
           ) : (
             <div className="space-y-4">
               {connectionRequests.map((request) => (
-                <div key={request.id} className="bg-[#1e293b] p-6 rounded-xl border border-gray-700">
+                <div key={request.id} className="bg-[#1e293b] p-6 rounded-xl border border-gray-700 hover:border-gray-600 transition">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <h3 className="text-xl font-semibold text-white mb-2">{request.sender_name}</h3>
-                      <p className="text-gray-400 mb-4">{request.sender_email}</p>
+                      <p className="text-gray-400 mb-4 flex items-center">
+                        <Mail className="w-4 h-4 mr-1" />
+                        {request.sender_email}
+                      </p>
                       
                       {request.user_profile && (
                         <div className="space-y-2 mb-4">
                           <div className="text-sm text-gray-300">
-                            <strong>Role:</strong> {request.user_profile.role || 'Not specified'}
+                            <strong className="text-indigo-400">Role:</strong> {request.user_profile.role || 'Not specified'}
                           </div>
                           <div className="text-sm text-gray-300">
-                            <strong>Experience:</strong> {request.user_profile.experience || 'Not specified'}
+                            <strong className="text-indigo-400">Experience:</strong> {request.user_profile.experience || 'Not specified'}
                           </div>
                           {request.user_profile.skills?.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-2">
@@ -506,6 +593,11 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
                                   {skill}
                                 </span>
                               ))}
+                              {request.user_profile.skills.length > 5 && (
+                                <span className="px-2 py-1 bg-gray-600/20 text-gray-400 rounded-md text-xs">
+                                  +{request.user_profile.skills.length - 5} more
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
@@ -516,16 +608,36 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
                       <button
                         onClick={() => respondToConnectionRequest(request.id, 'accept')}
                         disabled={processingRequests.has(request.id)}
-                        className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 px-4 py-2 rounded-lg transition text-sm"
+                        className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed px-6 py-2 rounded-lg transition text-sm font-semibold flex items-center"
                       >
-                        {processingRequests.has(request.id) ? 'Accepting...' : 'Accept'}
+                        {processingRequests.has(request.id) ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Accepting...
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="w-4 h-4 mr-2" />
+                            Accept
+                          </>
+                        )}
                       </button>
                       <button
                         onClick={() => respondToConnectionRequest(request.id, 'reject')}
                         disabled={processingRequests.has(request.id)}
-                        className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 px-4 py-2 rounded-lg transition text-sm"
+                        className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed px-6 py-2 rounded-lg transition text-sm font-semibold flex items-center"
                       >
-                        {processingRequests.has(request.id) ? 'Rejecting...' : 'Reject'}
+                        {processingRequests.has(request.id) ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Rejecting...
+                          </>
+                        ) : (
+                          <>
+                            <UserMinus className="w-4 h-4 mr-2" />
+                            Reject
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -612,7 +724,7 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
               <Bell className="w-5 h-5 mr-2" />
               Requests
               {pendingRequestCount > 0 && (
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center">
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center animate-pulse">
                   {pendingRequestCount}
                 </span>
               )}
