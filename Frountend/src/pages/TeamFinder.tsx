@@ -307,26 +307,50 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
 
       console.log('🌐 Making API call to respond to connection request...');
       
-      // Try the correct endpoint format based on the API structure
-      const endpoint = `https://startup-gps-backend-6rcx.onrender.com/connection-requests/${requestId}/${action}`;
-      
-      console.log(`🔍 Calling endpoint: ${endpoint}`);
-      
-      const response = await fetch(endpoint, {
-        method: 'POST', // Changed from PUT to POST
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+      // Try multiple endpoint variations to find the correct one
+      const endpointVariations = [
+        `https://startup-gps-backend-6rcx.onrender.com/connection-requests/${requestId}/${action}`,
+        `https://startup-gps-backend-6rcx.onrender.com/api/connection-requests/${requestId}/${action}`,
+        `https://startup-gps-backend-6rcx.onrender.com/connections/requests/${requestId}/${action}`,
+        `https://startup-gps-backend-6rcx.onrender.com/connection-requests/${action}/${requestId}`
+      ];
+
+      let successResponse = null;
+      let lastError = null;
+
+      for (const endpoint of endpointVariations) {
+        try {
+          console.log(`🔍 Trying endpoint: ${endpoint}`);
+          
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ request_id: requestId })
+          });
+
+          console.log(`📡 Response status for ${endpoint}:`, response.status);
+
+          if (response.ok) {
+            successResponse = await response.json();
+            console.log('✅ Success with endpoint:', endpoint, successResponse);
+            break;
+          } else if (response.status !== 404) {
+            // If it's not 404, it might be the right endpoint with a different error
+            const errorData = await response.json().catch(() => null);
+            console.log('⚠️ Non-404 error:', response.status, errorData);
+            lastError = errorData;
+          }
+        } catch (fetchError) {
+          console.log('❌ Fetch error for endpoint:', endpoint, fetchError);
+          continue;
         }
-      });
+      }
 
-      console.log(`📡 Response status:`, response.status);
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Success response:', data);
-        
-        // Remove the request from the list
+      if (successResponse) {
+        // Successfully processed the request
         setConnectionRequests(prev => {
           const updated = prev.filter(req => req.id !== requestId);
           console.log('📝 Updated requests list:', updated);
@@ -341,40 +365,13 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
         }
         
         setError(null);
-      } else if (response.status === 404) {
-        // If 404, try alternative endpoint format
-        console.log('⚠️ 404 error, trying alternative endpoint...');
-        
-        const altEndpoint = `https://startup-gps-backend-6rcx.onrender.com/api/connection-requests/${requestId}/${action}`;
-        console.log(`🔍 Trying alternative endpoint: ${altEndpoint}`);
-        
-        const altResponse = await fetch(altEndpoint, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (altResponse.ok) {
-          const data = await altResponse.json();
-          console.log('✅ Success with alternative endpoint:', data);
-          
-          setConnectionRequests(prev => prev.filter(req => req.id !== requestId));
-          setPendingRequestCount(prev => Math.max(0, prev - 1));
-          
-          if (action === 'accept') {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            await loadConnectedUsers();
-          }
-          
-          setError(null);
-        } else {
-          throw new Error(`Both endpoints failed. Status: ${altResponse.status}`);
-        }
       } else {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        throw new Error(errorData.detail || `Failed to ${action} connection request`);
+        // All endpoints failed
+        throw new Error(
+          lastError?.detail || 
+          lastError?.message || 
+          'Unable to process connection request. The API endpoint may have changed.'
+        );
       }
     } catch (error: any) {
       console.error(`❌ Failed to ${action} request:`, error);
