@@ -108,7 +108,6 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
       if (response.ok) {
         const profile = await response.json();
         
-        // Check all required fields
         const missingFields: string[] = [];
         
         if (!profile.name?.trim()) missingFields.push('Name');
@@ -145,7 +144,6 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
     if (onNavigateToProfile) {
       onNavigateToProfile();
     } else {
-      // Use React Router navigation
       navigate('/profile');
     }
   };
@@ -294,33 +292,64 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
     }
   };
 
-const respondToConnectionRequest = async (requestId: string, action: 'accept' | 'reject') => {
+  const respondToConnectionRequest = async (requestId: string, action: 'accept' | 'reject') => {
     setProcessingRequests(prev => new Set(prev).add(requestId));
     setError(null);
-    console.log(`🔄 ${action === 'accept' ? 'Accepting' : 'Rejecting'} request:`, requestId);
+    
+    console.log(`🔄 ${action === 'accept' ? 'Accepting' : 'Rejecting'} request ID:`, requestId);
+    console.log('📋 Current requests:', connectionRequests);
   
     try {
-      const response = await apiService.respondToConnectionRequest(requestId, action);
-      console.log('✅ Response:', response);
+      // Get the token to make a direct API call
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      console.log('🌐 Making direct API call...');
       
-      if (response.data || response.status === 200) {
-        // Success - remove the request from the list
-        setConnectionRequests(prev => prev.filter(req => req.id !== requestId));
+      // Make direct fetch call to ensure proper request format
+      const response = await fetch(
+        `https://startup-gps-backend-6rcx.onrender.com/api/connection-requests/${requestId}/${action}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      console.log('📡 Response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Success response:', data);
+        
+        // Remove the request from the list
+        setConnectionRequests(prev => {
+          const updated = prev.filter(req => req.id !== requestId);
+          console.log('📝 Updated requests list:', updated);
+          return updated;
+        });
         setPendingRequestCount(prev => Math.max(0, prev - 1));
         
         if (action === 'accept') {
-          // Reload connected users to show the new connection
+          console.log('🤝 Accepted! Reloading connections...');
+          // Wait a bit for backend to process before reloading
+          await new Promise(resolve => setTimeout(resolve, 500));
           await loadConnectedUsers();
         }
+        
+        setError(null);
       } else {
-        throw new Error(response.error || `Failed to ${action} request`);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Error response:', response.status, errorData);
+        throw new Error(errorData.detail || errorData.message || `Failed to ${action} request (Status: ${response.status})`);
       }
     } catch (error: any) {
       console.error(`❌ Failed to ${action} request:`, error);
-      const errorMessage = error.response?.data?.detail || 
-                          error.response?.data?.message || 
-                          error.message || 
-                          `Failed to ${action} connection request. Please try again.`;
+      const errorMessage = error.message || `Failed to ${action} connection request. Please try again.`;
       setError(errorMessage);
       setTimeout(() => setError(null), 5000);
     } finally {
@@ -482,9 +511,17 @@ const respondToConnectionRequest = async (requestId: string, action: 'accept' | 
 
           {error && (
             <div className="mb-6 bg-red-900/20 border border-red-500/50 rounded-lg p-4">
-              <div className="flex items-center">
-                <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
-                <p className="text-red-300">{error}</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
+                  <p className="text-red-300">{error}</p>
+                </div>
+                <button 
+                  onClick={() => setError(null)}
+                  className="text-red-400 hover:text-red-300 text-xl font-bold"
+                >
+                  ×
+                </button>
               </div>
             </div>
           )}
@@ -502,7 +539,8 @@ const respondToConnectionRequest = async (requestId: string, action: 'accept' | 
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <h3 className="text-xl font-semibold text-white mb-2">{request.sender_name}</h3>
-                      <p className="text-gray-400 mb-4">{request.sender_email}</p>
+                      <p className="text-gray-400 mb-2 text-sm">{request.sender_email}</p>
+                      <p className="text-xs text-gray-500 mb-4">Request ID: {request.id}</p>
                       
                       {request.user_profile && (
                         <div className="space-y-2 mb-4">
@@ -529,16 +567,33 @@ const respondToConnectionRequest = async (requestId: string, action: 'accept' | 
                       <button
                         onClick={() => respondToConnectionRequest(request.id, 'accept')}
                         disabled={processingRequests.has(request.id)}
-                        className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 px-4 py-2 rounded-lg transition text-sm"
+                        className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed px-4 py-2 rounded-lg transition text-sm flex items-center"
                       >
-                        {processingRequests.has(request.id) ? 'Accepting...' : 'Accept'}
+                        {processingRequests.has(request.id) ? (
+                          <>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-2"></div>
+                            Accepting...
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="w-4 h-4 mr-1" />
+                            Accept
+                          </>
+                        )}
                       </button>
                       <button
                         onClick={() => respondToConnectionRequest(request.id, 'reject')}
                         disabled={processingRequests.has(request.id)}
-                        className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 px-4 py-2 rounded-lg transition text-sm"
+                        className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed px-4 py-2 rounded-lg transition text-sm flex items-center"
                       >
-                        {processingRequests.has(request.id) ? 'Rejecting...' : 'Reject'}
+                        {processingRequests.has(request.id) ? (
+                          <>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-2"></div>
+                            Rejecting...
+                          </>
+                        ) : (
+                          'Reject'
+                        )}
                       </button>
                     </div>
                   </div>
@@ -564,7 +619,6 @@ const respondToConnectionRequest = async (requestId: string, action: 'accept' | 
             <p className="text-gray-300">Find and connect with team members</p>
           </div>
 
-          {/* Profile Completion Warning */}
           {!profileComplete && (
             <div className="mb-6 bg-yellow-900/20 border-2 border-yellow-500/50 rounded-xl p-6">
               <div className="flex items-start">
@@ -595,7 +649,7 @@ const respondToConnectionRequest = async (requestId: string, action: 'accept' | 
                 </div>
                 <button 
                   onClick={() => setError(null)}
-                  className="ml-auto text-red-400 hover:text-red-300"
+                  className="ml-auto text-red-400 hover:text-red-300 text-xl font-bold"
                 >
                   ×
                 </button>
@@ -603,7 +657,6 @@ const respondToConnectionRequest = async (requestId: string, action: 'accept' | 
             </div>
           )}
 
-          {/* Action Buttons */}
           <div className="flex justify-center gap-4 mb-8">
             <button
               onClick={handleFindTeamMembers}
@@ -632,7 +685,6 @@ const respondToConnectionRequest = async (requestId: string, action: 'accept' | 
             </button>
           </div>
 
-          {/* Connected Members */}
           <div className="mb-8">
             <h3 className="text-xl font-semibold text-green-400 mb-4 flex items-center">
               <MessageCircle className="w-5 h-5 mr-2" />
