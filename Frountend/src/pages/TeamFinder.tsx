@@ -294,7 +294,7 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
     }
   };
 
-  const respondToConnectionRequest = async (requestId: string, action: 'accept' | 'reject') => {
+const respondToConnectionRequest = async (requestId: string, action: 'accept' | 'reject') => {
     setProcessingRequests(prev => new Set(prev).add(requestId));
     setError(null);
     console.log(`🔄 ${action === 'accept' ? 'Accepting' : 'Rejecting'} request:`, requestId);
@@ -302,18 +302,27 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
     try {
       const response = await apiService.respondToConnectionRequest(requestId, action);
       console.log('✅ Response:', response);
-      if (response.status === 200 ||response.data) {
+      
+      if (response.data || response.status === 200) {
+        // Success - remove the request from the list
         setConnectionRequests(prev => prev.filter(req => req.id !== requestId));
-        setPendingRequestCount(prev => prev - 1);
+        setPendingRequestCount(prev => Math.max(0, prev - 1));
         
         if (action === 'accept') {
+          // Reload connected users to show the new connection
           await loadConnectedUsers();
         }
-      }else {
-      throw new Error(response.error || `Failed to ${action} request`);
-    }
+      } else {
+        throw new Error(response.error || `Failed to ${action} request`);
+      }
     } catch (error: any) {
-      setError(error.response?.data?.detail || `Failed to ${action} connection request.`);
+      console.error(`❌ Failed to ${action} request:`, error);
+      const errorMessage = error.response?.data?.detail || 
+                          error.response?.data?.message || 
+                          error.message || 
+                          `Failed to ${action} connection request. Please try again.`;
+      setError(errorMessage);
+      setTimeout(() => setError(null), 5000);
     } finally {
       setProcessingRequests(prev => {
         const newSet = new Set(prev);
