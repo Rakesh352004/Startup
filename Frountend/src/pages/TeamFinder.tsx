@@ -310,7 +310,7 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
       // Try multiple endpoint variations to find the correct one
       const endpointVariations = [
         `https://startup-gps-backend-6rcx.onrender.com/connection-requests/${requestId}/${action}`,
-        `https://startup-gps-backend-6rcx.onrender.com/api/connection-requests/${requestId}/${action}`,
+        `https://startup-gps-backend-6rcx.onrender.com/connection-requests/${requestId}/${action}`,
         `https://startup-gps-backend-6rcx.onrender.com/connections/requests/${requestId}/${action}`,
         `https://startup-gps-backend-6rcx.onrender.com/connection-requests/${action}/${requestId}`
       ];
