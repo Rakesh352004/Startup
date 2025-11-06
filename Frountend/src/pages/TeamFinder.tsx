@@ -300,7 +300,6 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
     console.log('📋 Current requests:', connectionRequests);
   
     try {
-      // Get the token to make a direct API call
       const token = localStorage.getItem('token');
       if (!token) {
         throw new Error('No authentication token found');
@@ -308,9 +307,9 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
 
       console.log('🌐 Making direct API call...');
       
-      // Make direct fetch call to ensure proper request format
+      // Corrected API endpoint - remove /api prefix
       const response = await fetch(
-        `https://startup-gps-backend-6rcx.onrender.com/api/connection-requests/${requestId}/${action}`,
+        `https://startup-gps-backend-6rcx.onrender.com/connection-requests/${requestId}/${action}`,
         {
           method: 'PUT',
           headers: {
@@ -326,7 +325,6 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
         const data = await response.json();
         console.log('✅ Success response:', data);
         
-        // Remove the request from the list
         setConnectionRequests(prev => {
           const updated = prev.filter(req => req.id !== requestId);
           console.log('📝 Updated requests list:', updated);
@@ -336,7 +334,6 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
         
         if (action === 'accept') {
           console.log('🤝 Accepted! Reloading connections...');
-          // Wait a bit for backend to process before reloading
           await new Promise(resolve => setTimeout(resolve, 500));
           await loadConnectedUsers();
         }
