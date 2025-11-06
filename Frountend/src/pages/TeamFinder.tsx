@@ -305,23 +305,86 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
         throw new Error('No authentication token found');
       }
 
-      console.log('🌐 Making direct API call...');
+      console.log('🌐 Making API call to respond to connection request...');
       
-      // Corrected API endpoint - remove /api prefix
-      const response = await fetch(
+      // Try multiple possible endpoint formats
+      const possibleEndpoints = [
         `https://startup-gps-backend-6rcx.onrender.com/connection-requests/${requestId}/${action}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+        `https://startup-gps-backend-6rcx.onrender.com/api/connection-requests/${requestId}/${action}`,
+        `https://startup-gps-backend-6rcx.onrender.com/connections/${requestId}/${action}`
+      ];
 
-      console.log('📡 Response status:', response.status);
-      
-      if (response.ok) {
+      let response: Response | null = null;
+      let lastError: any = null;
+
+      // Try each endpoint until one works
+      for (const endpoint of possibleEndpoints) {
+        try {
+          console.log(`🔍 Trying endpoint: ${endpoint}`);
+          
+          response = await fetch(endpoint, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          console.log(`📡 Response status for ${endpoint}:`, response.status);
+
+          if (response.ok) {
+            console.log('✅ Success with endpoint:', endpoint);
+            break; // Found working endpoint
+          } else if (response.status !== 404) {
+            // If it's not a 404, this might be the right endpoint but with a different error
+            lastError = await response.json().catch(() => ({ detail: 'Unknown error' }));
+            console.log('⚠️ Non-404 error, stopping search:', lastError);
+            break;
+          }
+        } catch (err) {
+          console.log(`❌ Failed with endpoint ${endpoint}:`, err);
+          lastError = err;
+        }
+      }
+
+      if (!response || !response.ok) {
+        // If all endpoints failed, try using the apiService method
+        console.log('🔄 All direct endpoints failed, trying apiService...');
+        
+        try {
+          let apiResponse;
+          if (action === 'accept') {
+            apiResponse = await apiService.acceptConnectionRequest(requestId);
+          } else {
+            apiResponse = await apiService.rejectConnectionRequest(requestId);
+          }
+
+          if (apiResponse.status === 200 || apiResponse.data) {
+            console.log('✅ Success with apiService');
+            
+            // Remove the request from the list
+            setConnectionRequests(prev => {
+              const updated = prev.filter(req => req.id !== requestId);
+              console.log('📝 Updated requests list:', updated);
+              return updated;
+            });
+            setPendingRequestCount(prev => Math.max(0, prev - 1));
+            
+            if (action === 'accept') {
+              console.log('🤝 Accepted! Reloading connections...');
+              await new Promise(resolve => setTimeout(resolve, 500));
+              await loadConnectedUsers();
+            }
+            
+            setError(null);
+            return; // Success!
+          }
+        } catch (apiError: any) {
+          console.error('❌ apiService also failed:', apiError);
+          throw new Error(apiError.response?.data?.detail || apiError.message || 'All methods failed');
+        }
+      } else {
+        // Direct fetch succeeded
         const data = await response.json();
         console.log('✅ Success response:', data);
         
@@ -339,14 +402,10 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
         }
         
         setError(null);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Error response:', response.status, errorData);
-        throw new Error(errorData.detail || errorData.message || `Failed to ${action} request (Status: ${response.status})`);
       }
     } catch (error: any) {
       console.error(`❌ Failed to ${action} request:`, error);
-      const errorMessage = error.message || `Failed to ${action} connection request. Please try again.`;
+      const errorMessage = error.message || `Failed to ${action} connection request. The endpoint may not exist or the request ID is invalid.`;
       setError(errorMessage);
       setTimeout(() => setError(null), 5000);
     } finally {
