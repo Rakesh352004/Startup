@@ -3211,7 +3211,7 @@ async def send_connection_request_api(
         
         logger.info(f"📤 Sending connection request: {user_id} -> {receiver_id}")
         
-        # Use the API-specific function that has better error handling
+        # Use the inline helper with better error handling
         request_id = create_connection_request_api(user_id, receiver_id, message)
         
         return {
@@ -3221,17 +3221,14 @@ async def send_connection_request_api(
         }
         
     except ValueError as e:
-        # Handle validation errors (already connected, already sent, etc.)
-        error_msg = str(e)
-        logger.warning(f"⚠️ Connection request validation error: {error_msg}")
-        raise HTTPException(status_code=400, detail=error_msg)
+        logger.warning(f"⚠️ Validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"❌ Failed to send connection request: {e}")
-        raise HTTPException(status_code=500, detail="Failed to send connection request")
+        logger.error(f"❌ Failed to send request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to send connection request: {str(e)}")
 
 
-# ALSO ADD THIS FIXED RESPOND ENDPOINT (replace your existing one)
-
+# 2. REPLACE YOUR EXISTING RESPOND ENDPOINT - around line 1760
 @app.post("/api/connection-requests/{request_id}/respond")
 async def respond_to_request_api(
     request_id: str, 
@@ -3241,15 +3238,74 @@ async def respond_to_request_api(
     """Respond to connection request - FIXED VERSION"""
     try:
         user_id = str(current_user["_id"])
-        logger.info(f"📨 Responding to request {request_id}: {response_data.action} by user {user_id}")
+        action = response_data.action
         
-        # CRITICAL FIX: Use the _fixed version from database.py
-        success = respond_to_connection_request_fixed(request_id, response_data.action, user_id)
+        logger.info(f"📨 User {user_id} responding to request {request_id} with action: {action}")
         
-        if not success:
-            raise HTTPException(status_code=400, detail="Failed to process connection request")
+        # Validate request exists and belongs to current user
+        try:
+            request_obj_id = ObjectId(request_id)
+        except Exception:
+            logger.error(f"❌ Invalid request ID format: {request_id}")
+            raise HTTPException(status_code=400, detail="Invalid request ID format")
         
-        action_text = "accepted" if response_data.action == "accept" else "rejected"
+        # Get the request from database
+        request_doc = connection_requests_collection.find_one({
+            "_id": request_obj_id,
+            "receiver_id": ObjectId(user_id),
+            "status": "pending"
+        })
+        
+        if not request_doc:
+            logger.warning(f"⚠️ Request {request_id} not found or not pending")
+            raise HTTPException(status_code=404, detail="Connection request not found or already processed")
+        
+        logger.info(f"✅ Found request: {request_doc}")
+        
+        # Process the response
+        new_status = "accepted" if action == "accept" else "rejected"
+        
+        # Update request status
+        update_result = connection_requests_collection.update_one(
+            {"_id": request_obj_id},
+            {
+                "$set": {
+                    "status": new_status,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+        
+        logger.info(f"📝 Updated request status to: {new_status}, matched: {update_result.matched_count}")
+        
+        # If accepted, create bidirectional connections
+        if action == "accept":
+            sender_id = str(request_doc["sender_id"])
+            receiver_id = str(request_doc["receiver_id"])
+            
+            logger.info(f"🤝 Creating connections: {sender_id} <-> {receiver_id}")
+            
+            # Create connection from sender to receiver
+            connections_collection.insert_one({
+                "user_id": ObjectId(sender_id),
+                "target_user_id": ObjectId(receiver_id),
+                "status": "connected",
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            })
+            
+            # Create connection from receiver to sender
+            connections_collection.insert_one({
+                "user_id": ObjectId(receiver_id),
+                "target_user_id": ObjectId(sender_id),
+                "status": "connected",
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            })
+            
+            logger.info(f"✅ Connections created successfully")
+        
+        action_text = "accepted" if action == "accept" else "rejected"
         logger.info(f"✅ Request {request_id} {action_text} successfully")
         
         return {
@@ -3257,22 +3313,31 @@ async def respond_to_request_api(
             "status": action_text
         }
         
-    except ValueError as e:
-        logger.error(f"❌ Validation error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ Error responding to request: {e}")
-        raise HTTPException(status_code=500, detail="Failed to process connection request")
+        logger.error(f"❌ Error processing request {request_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to process connection request: {str(e)}"
+        )
 
+
+# 3. ADD/VERIFY THIS ENDPOINT EXISTS - around line 1720
 @app.get("/api/connection-requests/received")
 async def get_received_requests(current_user=Depends(get_current_user)):
     """Get received connection requests"""
     try:
         user_id = str(current_user["_id"])
+        logger.info(f"📥 Getting received requests for user: {user_id}")
+        
         requests = get_connection_requests(user_id, "received")
+        logger.info(f"✅ Found {len(requests)} received requests")
+        
         return {"requests": requests, "total": len(requests)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to get requests")
+        logger.error(f"❌ Error getting received requests: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get requests: {str(e)}")
 
 
 @app.put("/api/connection-requests/{request_id}")
