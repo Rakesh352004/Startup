@@ -277,13 +277,15 @@ class ApiService {
     return this.makeRequest<{ requests: ConnectionRequest[]; total: number }>("/api/connection-requests/sent");
   }
 
-  async respondToConnectionRequest(requestId: string, action: 'accept' | 'reject') {
-  // Use the correct endpoint that matches your backend
+ async respondToConnectionRequest(requestId: string, action: 'accept' | 'reject') {
+  console.log(`🔧 API: Responding to request ${requestId} with action: ${action}`);
+  console.log(`🔧 API: Full URL: ${API_BASE_URL}/api/connection-requests/${requestId}/respond`);
+  
   return this.makeRequest<{ message: string; status: string }>(
-    `/api/connection-requests/${requestId}/respond`, // ← Correct endpoint
+    `/api/connection-requests/${requestId}/respond`,
     {
-      method: "POST", // ← Changed from PUT to POST
-      body: JSON.stringify({ action }), // Send action in body
+      method: "POST",
+      body: JSON.stringify({ action }),
     }
   );
 }
