@@ -278,11 +278,15 @@ class ApiService {
   }
 
   async respondToConnectionRequest(requestId: string, action: 'accept' | 'reject') {
-    return this.makeRequest<{ message: string; status: string }>(`/api/connection-requests/${requestId}`, {
-      method: "PUT", 
-      body: JSON.stringify({ action }),
-    });
-  }
+  // Use the correct endpoint that matches your backend
+  return this.makeRequest<{ message: string; status: string }>(
+    `/api/connection-requests/${requestId}/respond`, // ← Correct endpoint
+    {
+      method: "POST", // ← Changed from PUT to POST
+      body: JSON.stringify({ action }), // Send action in body
+    }
+  );
+}
 
   // Debug endpoint to check connection status
   async debugConnectionStatus(targetUserId: string) {
