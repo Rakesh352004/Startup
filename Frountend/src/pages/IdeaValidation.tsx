@@ -270,7 +270,7 @@ const apiService = {
     try {
       const response = await fetch('https://startup-gps-backend-6rcx.onrender.com/validate-idea-enhanced', {
         method: 'POST',
-        headers: apiService.getAuthHeaders(), // ✅ ADD AUTH HERE
+        headers: apiService.getAuthHeaders(),
         body: JSON.stringify({ prompt }),
       });
       
@@ -288,9 +288,10 @@ const apiService = {
 
   chatWithIdea: async (message: string, ideaContext: string, sessionId: string): Promise<{response?: string, error?: string}> => {
     try {
-      const response = await fetch('https://startup-gps-backend-6rcx.onrender.co/chat-with-idea', {
+      // ✅ FIXED: Changed from .co to .com
+      const response = await fetch('https://startup-gps-backend-6rcx.onrender.com/chat-with-idea', {
         method: 'POST',
-        headers: apiService.getAuthHeaders(), // ✅ ADD AUTH HERE
+        headers: apiService.getAuthHeaders(),
         body: JSON.stringify({ 
           message, 
           idea_context: ideaContext,
