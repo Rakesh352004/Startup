@@ -23,26 +23,67 @@ import requests
 from collections import defaultdict
 import time
 
+# CORRECT IMPORTS FOR main.py (line ~25)
+# Replace your existing database import with this:
+
 from database import (
-    users_collection, ideas_collection, profiles_collection, roadmaps_collection, 
-    research_collection, db, hash_password, verify_password, create_access_token,
-    get_user_by_id, get_user_profile, update_user_profile, create_roadmap, 
-    get_user_roadmaps, save_research, get_user_research_history, save_idea_validation, 
-    get_user_ideas, get_user_activity, get_user_stats, delete_user_data,
-    connection_requests_collection, connections_collection,  # Add these
+    # Collections
+    users_collection, 
+    ideas_collection, 
+    profiles_collection, 
+    roadmaps_collection, 
+    research_collection, 
+    connection_requests_collection, 
+    connections_collection,
+    conversations_collection,
+    messages_collection,
+    db,
     
-    # Use ONLY the _fixed versions:
-    create_connection_request,  # Remove the import, we'll define it inline
+    # Auth functions
+    hash_password, 
+    verify_password, 
+    create_access_token,
+    
+    # User functions
+    get_user_by_id, 
+    get_user_profile, 
+    update_user_profile,
+    get_user_activity, 
+    get_user_stats, 
+    delete_user_data,
+    
+    # Idea functions
+    save_idea_validation, 
+    get_user_ideas,
+    
+    # Roadmap functions
+    create_roadmap, 
+    get_user_roadmaps,
+    
+    # Research functions
+    save_research, 
+    get_user_research_history,
+    
+    # Team Finder - Connection Request Functions (use _fixed versions)
     get_connection_requests_fixed as get_connection_requests, 
     respond_to_connection_request_fixed as respond_to_connection_request,
     get_connection_status_fixed as get_connection_status, 
-    get_connected_profiles_fixed as get_connected_profiles, 
+    
+    # Team Finder - Connection Management (use _fixed versions)
+    get_connected_profiles_fixed as get_connected_profiles,
+    disconnect_users,
+    
+    # Team Finder - Chat Functions (use _fixed versions)
     create_conversation_fixed as create_conversation, 
     send_message_fixed as send_message, 
     get_messages_fixed as get_messages,
-    disconnect_users,
-    ObjectId  # Add this import
+    
+    # Utilities
+    ObjectId
 )
+
+# NOTE: create_connection_request is NOT imported because we define 
+# create_connection_request_api inline in main.py with better error handling
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from pydantic import BaseModel
