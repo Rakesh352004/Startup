@@ -3155,24 +3155,61 @@ async def search_team_members(search_input: TeamSearchInput, current_user=Depend
         logger.error(f"Team search failed: {e}")
         raise HTTPException(status_code=500, detail="Search failed")
 
+# ADD THIS ENDPOINT TO YOUR main.py file (around line 1650, after the team search endpoint)
+
+@app.post("/api/connection-requests")
+async def send_connection_request_api(
+    request_data: ConnectionRequestInput, 
+    current_user=Depends(get_current_user)
+):
+    """Send connection request to another user"""
+    try:
+        user_id = str(current_user["_id"])
+        receiver_id = request_data.receiver_id
+        message = request_data.message or ""
+        
+        logger.info(f"📤 Sending connection request: {user_id} -> {receiver_id}")
+        
+        # Use the API-specific function that has better error handling
+        request_id = create_connection_request_api(user_id, receiver_id, message)
+        
+        return {
+            "request_id": request_id,
+            "status": "sent",
+            "message": "Connection request sent successfully"
+        }
+        
+    except ValueError as e:
+        # Handle validation errors (already connected, already sent, etc.)
+        error_msg = str(e)
+        logger.warning(f"⚠️ Connection request validation error: {error_msg}")
+        raise HTTPException(status_code=400, detail=error_msg)
+    except Exception as e:
+        logger.error(f"❌ Failed to send connection request: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send connection request")
+
+
+# ALSO ADD THIS FIXED RESPOND ENDPOINT (replace your existing one)
+
 @app.post("/api/connection-requests/{request_id}/respond")
 async def respond_to_request_api(
     request_id: str, 
     response_data: ConnectionResponseInput, 
     current_user=Depends(get_current_user)
 ):
-    """Respond to connection request"""
+    """Respond to connection request - FIXED VERSION"""
     try:
         user_id = str(current_user["_id"])
-        logger.info(f"📨 Backend: Responding to request {request_id}: {response_data.action} by user {user_id}")
+        logger.info(f"📨 Responding to request {request_id}: {response_data.action} by user {user_id}")
         
-        success = respond_to_connection_request(request_id, response_data.action, user_id)
+        # CRITICAL FIX: Use the _fixed version from database.py
+        success = respond_to_connection_request_fixed(request_id, response_data.action, user_id)
         
         if not success:
             raise HTTPException(status_code=400, detail="Failed to process connection request")
         
         action_text = "accepted" if response_data.action == "accept" else "rejected"
-        logger.info(f"✅ Backend: Request {request_id} {action_text} successfully")
+        logger.info(f"✅ Request {request_id} {action_text} successfully")
         
         return {
             "message": f"Connection request {action_text} successfully",
@@ -3180,10 +3217,10 @@ async def respond_to_request_api(
         }
         
     except ValueError as e:
-        logger.error(f"❌ Backend validation error: {e}")
+        logger.error(f"❌ Validation error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"❌ Backend error responding to request: {e}")
+        logger.error(f"❌ Error responding to request: {e}")
         raise HTTPException(status_code=500, detail="Failed to process connection request")
 
 @app.get("/api/connection-requests/received")
