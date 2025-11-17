@@ -293,99 +293,54 @@ const TeamFinder = ({ onStartChat, onNavigateToProfile }: TeamFinderProps) => {
   };
 
   const respondToConnectionRequest = async (requestId: string, action: 'accept' | 'reject') => {
-    setProcessingRequests(prev => new Set(prev).add(requestId));
-    setError(null);
-    
-    console.log(`🔄 ${action === 'accept' ? 'Accepting' : 'Rejecting'} request ID:`, requestId);
-    console.log('📋 Current requests:', connectionRequests);
+  setProcessingRequests(prev => new Set(prev).add(requestId));
+  setError(null);
   
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
+  console.log(`🔄 ${action === 'accept' ? 'Accepting' : 'Rejecting'} request ID:`, requestId);
+  console.log('📋 Current requests:', connectionRequests);
 
-      console.log('🌐 Making API call to respond to connection request...');
-      
-      // Try multiple endpoint variations to find the correct one
-      const endpointVariations = [
-        `https://startup-gps-backend-6rcx.onrender.com/connection-requests/${requestId}/${action}`,
-        `https://startup-gps-backend-6rcx.onrender.com/connection-requests/${requestId}/${action}`,
-        `https://startup-gps-backend-6rcx.onrender.com/connections/requests/${requestId}/${action}`,
-        `https://startup-gps-backend-6rcx.onrender.com/connection-requests/${action}/${requestId}`
-      ];
-
-      let successResponse = null;
-      let lastError = null;
-
-      for (const endpoint of endpointVariations) {
-        try {
-          console.log(`🔍 Trying endpoint: ${endpoint}`);
-          
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ request_id: requestId })
-          });
-
-          console.log(`📡 Response status for ${endpoint}:`, response.status);
-
-          if (response.ok) {
-            successResponse = await response.json();
-            console.log('✅ Success with endpoint:', endpoint, successResponse);
-            break;
-          } else if (response.status !== 404) {
-            // If it's not 404, it might be the right endpoint with a different error
-            const errorData = await response.json().catch(() => null);
-            console.log('⚠️ Non-404 error:', response.status, errorData);
-            lastError = errorData;
-          }
-        } catch (fetchError) {
-          console.log('❌ Fetch error for endpoint:', endpoint, fetchError);
-          continue;
-        }
-      }
-
-      if (successResponse) {
-        // Successfully processed the request
-        setConnectionRequests(prev => {
-          const updated = prev.filter(req => req.id !== requestId);
-          console.log('📝 Updated requests list:', updated);
-          return updated;
-        });
-        setPendingRequestCount(prev => Math.max(0, prev - 1));
-        
-        if (action === 'accept') {
-          console.log('🤝 Accepted! Reloading connections...');
-          await new Promise(resolve => setTimeout(resolve, 500));
-          await loadConnectedUsers();
-        }
-        
-        setError(null);
-      } else {
-        // All endpoints failed
-        throw new Error(
-          lastError?.detail || 
-          lastError?.message || 
-          'Unable to process connection request. The API endpoint may have changed.'
-        );
-      }
-    } catch (error: any) {
-      console.error(`❌ Failed to ${action} request:`, error);
-      const errorMessage = error.message || `Failed to ${action} connection request. Please try again.`;
-      setError(errorMessage);
-      setTimeout(() => setError(null), 5000);
-    } finally {
-      setProcessingRequests(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(requestId);
-        return newSet;
+  try {
+    // Use the apiService method directly
+    const response = await apiService.respondToConnectionRequest(requestId, action);
+    
+    console.log('✅ Response:', response);
+    
+    if (response.status === 200 && response.data) {
+      // Remove request from list
+      setConnectionRequests(prev => {
+        const updated = prev.filter(req => req.id !== requestId);
+        console.log('📝 Updated requests list:', updated);
+        return updated;
       });
+      setPendingRequestCount(prev => Math.max(0, prev - 1));
+      
+      if (action === 'accept') {
+        console.log('🤝 Accepted! Reloading connections...');
+        // Wait a bit then reload connections
+        setTimeout(() => {
+          loadConnectedUsers();
+        }, 500);
+      }
+      
+      setError(null);
+    } else {
+      throw new Error(response.error || `Failed to ${action} connection request`);
     }
-  };
+  } catch (error: any) {
+    console.error(`❌ Failed to ${action} request:`, error);
+    const errorMessage = error.response?.data?.detail || 
+                        error.message || 
+                        `Failed to ${action} connection request. Please try again.`;
+    setError(errorMessage);
+    setTimeout(() => setError(null), 5000);
+  } finally {
+    setProcessingRequests(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(requestId);
+      return newSet;
+    });
+  }
+};
 
   const startChat = async (memberId: string, memberName: string) => {
     try {
