@@ -3161,10 +3161,10 @@ async def respond_to_request_api(
     response_data: ConnectionResponseInput, 
     current_user=Depends(get_current_user)
 ):
-    """Respond to connection request - POST with /respond"""
+    """Respond to connection request"""
     try:
         user_id = str(current_user["_id"])
-        logger.info(f"📨 Responding to request {request_id}: {response_data.action} by user {user_id}")
+        logger.info(f"📨 Backend: Responding to request {request_id}: {response_data.action} by user {user_id}")
         
         success = respond_to_connection_request(request_id, response_data.action, user_id)
         
@@ -3172,7 +3172,7 @@ async def respond_to_request_api(
             raise HTTPException(status_code=400, detail="Failed to process connection request")
         
         action_text = "accepted" if response_data.action == "accept" else "rejected"
-        logger.info(f"✅ Request {request_id} {action_text} successfully")
+        logger.info(f"✅ Backend: Request {request_id} {action_text} successfully")
         
         return {
             "message": f"Connection request {action_text} successfully",
@@ -3180,10 +3180,10 @@ async def respond_to_request_api(
         }
         
     except ValueError as e:
-        logger.error(f"❌ Validation error: {e}")
+        logger.error(f"❌ Backend validation error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"❌ Error responding to request: {e}")
+        logger.error(f"❌ Backend error responding to request: {e}")
         raise HTTPException(status_code=500, detail="Failed to process connection request")
 
 @app.get("/api/connection-requests/received")
