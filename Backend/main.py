@@ -3155,77 +3155,36 @@ async def search_team_members(search_input: TeamSearchInput, current_user=Depend
         logger.error(f"Team search failed: {e}")
         raise HTTPException(status_code=500, detail="Search failed")
 
-@app.post("/api/connection-requests")
-async def send_connection_request_api(request_data: ConnectionRequestInput, current_user=Depends(get_current_user)):
-    """Send connection request with detailed logging and error handling"""
+@app.post("/api/connection-requests/{request_id}/respond")
+async def respond_to_request_api(
+    request_id: str, 
+    response_data: ConnectionResponseInput, 
+    current_user=Depends(get_current_user)
+):
+    """Respond to connection request - POST with /respond"""
     try:
-        sender_id = str(current_user["_id"])
-        receiver_id = request_data.receiver_id
+        user_id = str(current_user["_id"])
+        logger.info(f"📨 Responding to request {request_id}: {response_data.action} by user {user_id}")
         
-        logger.info(f"📤 Connection request: sender={sender_id} -> receiver={receiver_id}")
-        logger.info(f"📧 Sender email: {current_user.get('email')}")
+        success = respond_to_connection_request(request_id, response_data.action, user_id)
         
-        # Validate receiver_id format
-        if not receiver_id or len(receiver_id) != 24:
-            logger.error(f"❌ Invalid receiver ID format: {receiver_id}")
-            raise HTTPException(status_code=400, detail="Invalid user ID format")
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to process connection request")
         
-        # Check if receiver exists
-        try:
-            receiver = get_user_by_id(receiver_id)
-            if not receiver:
-                logger.error(f"❌ Receiver not found: {receiver_id}")
-                raise HTTPException(status_code=404, detail="User not found")
-            logger.info(f"✅ Receiver found: {receiver.get('email')}")
-        except Exception as e:
-            logger.error(f"❌ Error checking receiver: {e}")
-            raise HTTPException(status_code=404, detail="User not found")
+        action_text = "accepted" if response_data.action == "accept" else "rejected"
+        logger.info(f"✅ Request {request_id} {action_text} successfully")
         
-        # Use the API-specific function (not the database.py one)
-        try:
-            request_id = create_connection_request_api(sender_id, receiver_id, request_data.message)
-            
-            logger.info(f"✅ Connection request created: {request_id}")
-            logger.info(f"📊 Request saved in database")
-            
-            # Verify it was saved
-            saved_request = connection_requests_collection.find_one({"_id": ObjectId(request_id)})
-            if saved_request:
-                logger.info(f"✅ Verified: Request {request_id} exists in database")
-                logger.info(f"   Status: {saved_request.get('status')}")
-                logger.info(f"   Sender: {saved_request.get('sender_id')}")
-                logger.info(f"   Receiver: {saved_request.get('receiver_id')}")
-            else:
-                logger.error(f"❌ Request {request_id} NOT found in database!")
-            
-            return {
-                "request_id": request_id,
-                "status": "sent",
-                "message": "Connection request sent successfully"
-            }
-            
-        except ValueError as e:
-            error_msg = str(e)
-            logger.warning(f"⚠️ Validation error: {error_msg}")
-            
-            # Map errors to status codes
-            if "already sent" in error_msg.lower():
-                raise HTTPException(status_code=400, detail="Connection request already sent")
-            elif "already connected" in error_msg.lower():
-                raise HTTPException(status_code=400, detail="Already connected with this user")
-            elif "wait" in error_msg.lower() and "hours" in error_msg.lower():
-                raise HTTPException(status_code=429, detail=error_msg)
-            elif "yourself" in error_msg.lower():
-                raise HTTPException(status_code=400, detail="Cannot send request to yourself")
-            else:
-                raise HTTPException(status_code=400, detail=error_msg)
+        return {
+            "message": f"Connection request {action_text} successfully",
+            "status": action_text
+        }
         
-    except HTTPException:
-        raise
+    except ValueError as e:
+        logger.error(f"❌ Validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"❌ Unexpected error in connection request: {e}")
-        logger.exception(e)  # Full stack trace
-        raise HTTPException(status_code=500, detail="Failed to send connection request")
+        logger.error(f"❌ Error responding to request: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process connection request")
 
 @app.get("/api/connection-requests/received")
 async def get_received_requests(current_user=Depends(get_current_user)):
@@ -3237,32 +3196,7 @@ async def get_received_requests(current_user=Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to get requests")
 
-@app.post("/api/connection-requests/{request_id}/respond")
-async def respond_to_request_api(request_id: str, response_data: ConnectionResponseInput, current_user=Depends(get_current_user)):
-    """Respond to connection request with enhanced error handling"""
-    try:
-        user_id = str(current_user["_id"])
-        logger.info(f"📨 Response to request {request_id}: {response_data.action} by user {user_id}")
-        
-        success = respond_to_connection_request(request_id, response_data.action, user_id)
-        
-        if not success:
-            raise HTTPException(status_code=400, detail="Failed to process request response")
-        
-        action_text = "accepted" if response_data.action == "accept" else "rejected"
-        logger.info(f"✅ Request {request_id} {action_text}")
-        
-        return {
-            "message": f"Connection request {action_text} successfully",
-            "status": action_text
-        }
-        
-    except ValueError as e:
-        logger.error(f"❌ Validation error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"❌ Unexpected error responding to request: {e}")
-        raise HTTPException(status_code=500, detail="Failed to process connection request")
+
 @app.put("/api/connection-requests/{request_id}")
 async def respond_to_request_api(
     request_id: str, 
